@@ -1,7 +1,3 @@
-document.body.appendChild(view);
-
-stage.addChild(viewport)
-
 const canvas = document.getElementById('canvas');
 
 const app = new PIXI.Application({
@@ -21,3 +17,6 @@ const viewport = new pixi_viewport.Viewport({
     interaction: app.renderer.plugins.interaction
 })
 
+document.body.appendChild(view);
+
+stage.addChild(viewport)

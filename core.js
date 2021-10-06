@@ -1,15 +1,70 @@
+const Physics = {
+    gravity: 9.81
+}
+
 class GameObject {
+    manager = new ComponentManager()
     constructor() {
+    }
+    addComponent = this.manager.addComponent
+    getComponent = this.manager.getComponent
+    removeComponent = this.manager.removeComponent
+}
+
+class ComponentManager {
+    components = {}
+    addComponent = (component) => {
+        if(component instanceof Component) {
+            this.components[component.constructor.name] = component
+        } else {
+            console.error('Error: Component non-existing')
+        }
+
+    }
+    getComponent = (identifier) => {
+        return this.components[identifier]
+    }
+    removeComponent = (identifier) => {
+        delete this.components[identifier]
     }
 }
 
 class PhysicsObject extends GameObject {
-
+    constructor() {
+        this.addComponent(new Transform())
+        this.addComponent(new PhysicsComponent())
+    }
 }
 
-class ShapeObject extends PhysicsObject {
-
+class Component {
 }
+
+class Transform extends Component {
+    static name = 'Transform'
+    position = new Vector2()
+    rotation = 0
+}
+
+class PhysicsComponent extends Component {
+    static name = 'PhysicsComponent'
+
+    _accel = new Vector2()   
+    _vel = new Vector2()
+    set acceleration(acceleration) {
+        this._accel = acceleration
+    }
+    get acceleration() {
+        return this._accel
+    }
+    set velocity(velocity) {
+        this._vel = velocity
+    }
+    get velocity() {
+        return this._vel
+    }
+}
+
+
 
 class Vector2 {
     constructor(x, y) {
@@ -37,6 +92,9 @@ class Vector2 {
         this.y += y;
         return this;
     }
+    static add(a, b) {
+        return new Vector2(a.x+b.x, a.y+b.y)
+    }
     sub(x, y) {
         if (x instanceof Vector2) {
             this.x -= x.x;
@@ -47,15 +105,24 @@ class Vector2 {
         this.y -= y;
         return this;
     }
+    static sub(a, b) {
+        return new Vector2(a.x-b.x, a.y-b.y)
+    }
     div(n) {
         this.x /= n;
         this.y /= n;
         return this;
     }
+    static div(a, b) {
+        return new Vector2(a.x/b.x, a.y/b.y)
+    }
     mult(n) {
         this.x *= n;
         this.y *= n;
         return this;
+    }
+    static multi(a, b) {
+        return new Vector2(a.x*b.x, a.y*b.y)
     }
     len2() {
         return this.dot(this)
@@ -76,8 +143,12 @@ class Vector2 {
         return this.x * x + this.y * y;
     }
     dist(v) {
-        var d = v.copy().sub(this);
-        return d.mag();
+        var d = Vector2.sub(v, this)
+        return d.mag()
+    }
+    static dist(a, b) {
+        let d = Vector2.sub(a, b)
+        return d.mag()
     }
     limit(l) {
         var mSq = this.magSq();
