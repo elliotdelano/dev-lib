@@ -1,5 +1,14 @@
-String.prototype.splice = function (idx, rem, str) {
-    return this.slice(0, idx) + str + this.slice(idx + Math.abs(rem));
+class GameObject {
+    constructor() {
+    }
+}
+
+class PhysicsObject extends GameObject {
+
+}
+
+class ShapeObject extends PhysicsObject {
+
 }
 
 class Vector2 {
@@ -414,6 +423,121 @@ class Box {
         viewport.addChild(this.box)
         //this.box.zIndex = 20
         this.box.position.set(this.position.x, this.position.y)
+    }
+}
+
+class radius {
+    position
+    constructor(x, y, r) {
+        this.position = new Vector2(x, y)
+        this.r = r
+    }
+    within(point) {
+        let dist = Math.sqrt(Math.pow((point.position.x - this.position.x), 2) + Math.pow((point.position.y - this.position.y), 2))
+        return dist <= (point.size + this.r)
+    }
+}
+
+class QuadTree {
+    constructor(rect, n, max_depth, depth) {
+        this.bounds = rect
+        this.size = n
+        this.max_depth = max_depth
+        this.depth = depth
+        this.objects = []
+    }
+
+    split() {
+        let rectTL = new Box(new Vector2(this.bounds.position.x, this.bounds.position.y), this.bounds.width / 2, this.bounds.height / 2)
+        let rectTR = new Box(new Vector2(this.bounds.position.x + this.bounds.width / 2, this.bounds.position.y), this.bounds.width / 2, this.bounds.height / 2)
+        let rectBL = new Box(new Vector2(this.bounds.position.x, this.bounds.position.y + this.bounds.height / 2), this.bounds.width / 2, this.bounds.height / 2)
+        let rectBR = new Box(new Vector2(this.bounds.position.x + this.bounds.width / 2, this.bounds.position.y + this.bounds.height / 2), this.bounds.width / 2, this.bounds.height / 2)
+        this.boxTL = new QuadTree(rectTL, this.size, this.max_depth, this.depth + 1)
+        this.boxTR = new QuadTree(rectTR, this.size, this.max_depth, this.depth + 1)
+        this.boxBL = new QuadTree(rectBL, this.size, this.max_depth, this.depth + 1)
+        this.boxBR = new QuadTree(rectBR, this.size, this.max_depth, this.depth + 1)
+        for (let o of this.objects) {
+            this.boxTL.append(o)
+            this.boxTR.append(o)
+            this.boxBL.append(o)
+            this.boxBR.append(o)
+        }
+        this.objects = []
+    }
+
+    append(object) {
+        if (!object.bounds) {
+            return false
+        }
+        if (!this.bounds.intersectsRect(object.bounds)) {
+            //console.log(object)
+            return false
+        }
+        if (this.objects.length < this.size && !this.isSplit) {
+            this.objects.push(object)
+        } else {
+            if (!this.isSplit && this.depth < this.max_depth) {
+                this.split()
+                this.isSplit = true
+            } else {
+                this.objects.push(object)
+                //console.log(this.objects)
+                return
+            }
+            this.boxTL.append(object)
+            this.boxTR.append(object)
+            this.boxBL.append(object)
+            this.boxBR.append(object)
+        }
+    }
+    query(range, type = null) {
+        let result = []
+        if (!this.bounds.intersectsRect(range)) return result
+
+
+        for (let o of this.objects) {
+            if (range.intersectsRect(o.bounds)) {
+                if (type) {
+                    if (type == "Bot") {
+                        if (o instanceof Bot) {
+                            result.push(o)
+                        }
+                    }
+                } else {
+                    result.push(o)
+                }
+            }
+        }
+        if (!this.isSplit) return result
+
+        result = result.concat(this.boxTL.query(range))
+        result = result.concat(this.boxTR.query(range))
+        result = result.concat(this.boxBL.query(range))
+        result = result.concat(this.boxBR.query(range))
+        // let tl = this.boxTL.query(range)
+        // let tr = this.boxTR.query(range)
+        // let bl = this.boxBL.query(range)
+        // let br = this.boxBR.query(range)
+        // tl.forEach(result.add, result)
+        // tr.forEach(result.add, result)
+        // bl.forEach(result.add, result)
+        // br.forEach(result.add, result)
+        return result
+    }
+
+    clear() {
+        this.objects = [];
+        if (this.isSplit) {
+            this.boxTL.clear()
+            this.boxTR.clear()
+            this.boxBL.clear()
+            this.boxBR.clear()
+        }
+        this.boxTL = undefined
+        this.boxTR = undefined
+        this.boxBL = undefined
+        this.boxBR = undefined
+        this.isSplit = false
     }
 }
 
