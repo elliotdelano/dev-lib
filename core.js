@@ -1,5 +1,42 @@
 const Physics = {
-    gravity: 9.81
+    gravity: 9.81,
+    updates: [],
+    frameRate: 60,
+
+    fpsInterval: 1000 / 60,
+    lastDrawTime: 0,
+    frameCount: 0,
+    //lastSampleTime,
+    requestID: undefined,
+    beginLoop: function () {
+        Physics.fpsInterval = 1000 / Physics.frameRate;
+        Physics.lastDrawTime = performance.now();
+        //this.lastSampleTime = lastDrawTime;
+        Physics.frameCount = 0;
+
+        Physics.loop();
+    },
+    loop: function (now) {
+        Physics.requestID = requestAnimationFrame(Physics.loop);
+
+        let elapsed = now - Physics.lastDrawTime;
+
+        // if enough time has elapsed draw the next frame
+        if (elapsed > Physics.fpsInterval) {
+            Physics.lastDrawTime = now - (elapsed % Physics.fpsInterval);
+            ///////////Do Stuff//////////
+
+            for (let obj of Physics.updates) {
+                obj.update()
+            }
+
+            //////////Stop Stuff/////////
+            Physics.frameCount++;
+        }
+    },
+    endLoop: function () {
+        cancelAnimationFrame(Physics.requestID)
+    }
 }
 
 class GameObject {
@@ -12,14 +49,17 @@ class GameObject {
 }
 
 class ComponentManager {
+    constructor(parent) {
+        this.parent = parent
+    }
     components = {}
     addComponent = (component) => {
-        if(component instanceof Component) {
+        if (component instanceof Component) {
             this.components[component.constructor.name] = component
+            this.components[component.constructor.name].gameObject = this.parent
         } else {
             console.error('Error: Component non-existing')
         }
-
     }
     getComponent = (identifier) => {
         return this.components[identifier]
@@ -37,6 +77,13 @@ class PhysicsObject extends GameObject {
 }
 
 class Component {
+    _gameObject
+    set gameObject(gameObject) {
+        this._gameObject = gameObject
+    }
+    get gameObject() {
+        return this._gameObject
+    }
 }
 
 class Transform extends Component {
@@ -48,8 +95,10 @@ class Transform extends Component {
 class PhysicsComponent extends Component {
     static name = 'PhysicsComponent'
 
-    _accel = new Vector2()   
+    _accel = new Vector2()
     _vel = new Vector2()
+    mass = 0
+
     set acceleration(acceleration) {
         this._accel = acceleration
     }
@@ -61,6 +110,23 @@ class PhysicsComponent extends Component {
     }
     get velocity() {
         return this._vel
+    }
+
+}
+
+class BoxCollider extends Component {
+    points = []
+    constructor(w, h, offset) {
+        this.width = w
+        this.height = h
+        this.offset = offset
+        calculatePoints()
+    }
+    calculatePoints() {
+        points[0] = Vector2.add(new Vector2(-this.width / 2, -this.height / 2), this.offset)
+        points[1] = Vector2.add(new Vector2(this.width / 2, this.height / 2), this.offset)
+        points[2] = Vector2.add(new Vector2(this.width / 2, -this.height / 2), this.offset)
+        points[3] = Vector2.add(new Vector2(-this.width / 2, this.height / 2), this.offset)
     }
 }
 
@@ -93,7 +159,7 @@ class Vector2 {
         return this;
     }
     static add(a, b) {
-        return new Vector2(a.x+b.x, a.y+b.y)
+        return new Vector2(a.x + b.x, a.y + b.y)
     }
     sub(x, y) {
         if (x instanceof Vector2) {
@@ -106,7 +172,7 @@ class Vector2 {
         return this;
     }
     static sub(a, b) {
-        return new Vector2(a.x-b.x, a.y-b.y)
+        return new Vector2(a.x - b.x, a.y - b.y)
     }
     div(n) {
         this.x /= n;
@@ -114,7 +180,7 @@ class Vector2 {
         return this;
     }
     static div(a, b) {
-        return new Vector2(a.x/b.x, a.y/b.y)
+        return new Vector2(a.x / b.x, a.y / b.y)
     }
     mult(n) {
         this.x *= n;
@@ -122,7 +188,7 @@ class Vector2 {
         return this;
     }
     static multi(a, b) {
-        return new Vector2(a.x*b.x, a.y*b.y)
+        return new Vector2(a.x * b.x, a.y * b.y)
     }
     len2() {
         return this.dot(this)
