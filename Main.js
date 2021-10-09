@@ -20,3 +20,5 @@ const viewport = new pixi_viewport.Viewport({
 document.body.appendChild(view);
 
 stage.addChild(viewport)
+
+World.stage = stage
