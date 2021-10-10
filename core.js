@@ -1,259 +1,3 @@
-const World = {
-    stage: undefined,
-    size: new Vector2(400, 400),
-    bounds: new Collider([new Vector2(0, 0), new Vector2(World.size.x, 0), 
-        new Vector2(World.size.x, World.size.y), new Vector2(0, World.size.y)]),
-    tree: new QuadTree(World.bounds, 2, 10, 0),
-    Colliders: []
-}
-
-const Physics = {
-    gravity: 9.81,
-    updates: [],
-    frameRate: 60,
-
-    fpsInterval: 1000 / 60,
-    lastDrawTime: 0,
-    frameCount: 0,
-    //lastSampleTime,
-    requestID: undefined,
-    beginLoop: function () {
-        Physics.fpsInterval = 1000 / Physics.frameRate;
-        Physics.lastDrawTime = performance.now();
-        //this.lastSampleTime = lastDrawTime;
-        Physics.frameCount = 0;
-
-        Physics.loop();
-    },
-    loop: function (now) {
-        Physics.requestID = requestAnimationFrame(Physics.loop);
-
-        let elapsed = now - Physics.lastDrawTime;
-
-        // if enough time has elapsed draw the next frame
-        if (elapsed > Physics.fpsInterval) {
-            Physics.lastDrawTime = now - (elapsed % Physics.fpsInterval);
-            ///////////Do Stuff//////////
-            World.tree.clear()
-            for(let col of World.Colliders) {
-                World.tree.push(col)
-            }
-            for (let obj of Physics.updates) {
-                obj.update()
-            }
-
-            //////////Stop Stuff/////////
-            Physics.frameCount++;
-        }
-    },
-    endLoop: function () {
-        cancelAnimationFrame(Physics.requestID)
-    }
-}
-
-const Renderer = {
-    updates = [],
-    frameRate: 60,
-
-    fpsInterval: 1000 / 60,
-    lastDrawTime: 0,
-    frameCount: 0,
-    //lastSampleTime,
-    requestID: undefined,
-    beginLoop: function () {
-        Renderer.fpsInterval = 1000 / Renderer.frameRate;
-        Renderer.lastDrawTime = performance.now();
-        //this.lastSampleTime = lastDrawTime;
-        Renderer.frameCount = 0;
-
-        Renderer.loop();
-    },
-    loop: function (now) {
-        Renderer.requestID = requestAnimationFrame(Renderer.loop);
-
-        let elapsed = now - Renderer.lastDrawTime;
-
-        // if enough time has elapsed draw the next frame
-        if (elapsed > Renderer.fpsInterval) {
-            Renderer.lastDrawTime = now - (elapsed % Renderer.fpsInterval);
-            ///////////Do Stuff//////////
-            
-            for(let obj of Renderer.updates) {
-                let transform = obj.getComponent(Transform.name)
-                let graphic = obj.getComponent(Graphic.name)
-                graphic.graphic.position = transform.position
-            }
-
-            //////////Stop Stuff/////////
-            Renderer.frameCount++;
-        }
-    },
-    endLoop: function () {
-        cancelAnimationFrame(Renderer.requestID)
-    }
-}
-
-class GameObject {
-    manager = new ComponentManager()
-    constructor() {
-    }
-    addComponent = this.manager.addComponent
-    getComponent = this.manager.getComponent
-    removeComponent = this.manager.removeComponent
-}
-
-class ComponentManager {
-    constructor(parent) {
-        this.parent = parent
-    }
-    components = {}
-    addComponent = (component) => {
-        if (component instanceof Component) {
-            this.components[component.constructor.name] = component
-            this.components[component.constructor.name].gameObject = this.parent
-        } else {
-            console.error('Error: Component non-existing')
-        }
-    }
-    getComponent = (identifier) => {
-        return this.components[identifier]
-    }
-    removeComponent = (identifier) => {
-        this.components[identifier].removal()
-        delete this.components[identifier]
-    }
-}
-
-class PhysicsObject extends GameObject {
-    constructor() {
-        this.addComponent(new Transform())
-        this.addComponent(new PhysicsComponent())
-    }
-}
-
-class Component {
-    _gameObject
-    set gameObject(gameObject) {
-        this._gameObject = gameObject
-    }
-    get gameObject() {
-        return this._gameObject
-    }
-    removal() {
-        return null
-    }
-}
-
-class Transform extends Component {
-    static name = 'Transform'
-    position = new Vector2()
-    rotation = 0
-}
-
-class PhysicsComponent extends Component {
-    static name = 'PhysicsComponent'
-    gravity = new Vector2(0, 9.81)
-    mass = 1
-    constructor() {
-        Physics.updates.push(this)
-    }
-
-    applyForce(force) {
-        this.acceleration.add(force.div(this.mass))
-    }
-    update() {
-        this.applyForce(this.gravity)
-
-        this.velocity.add(this.acceleration)
-        this.gameObject.getComponent(Transform.name).position.add(this.velocity)
-    }
-
-    _accel = new Vector2()
-    _vel = new Vector2()
-    mass = 0
-
-    set acceleration(acceleration) {
-        this._accel = acceleration
-    }
-    get acceleration() {
-        return this._accel
-    }
-    set velocity(velocity) {
-        this._vel = velocity
-    }
-    get velocity() {
-        return this._vel
-    }
-
-}
-
-class Collider extends Component {
-    static name = 'Collider'
-    constructor(points) {
-        this.points = points || []
-        this.bounds = {
-            min: { x: 0, y: 0 },
-            max: { x: 0, y: 0 }
-        }
-        Collider.UpdateBounds(this.bounds, this.points)
-        World.Colliders.push(this)
-    }
-    removal() {
-        for(let i = World.Colliders.length-1; i >= 0; i--) {
-            if(World.Colliders[i]===this) {
-                return World.Colliders.splice(i, 1)
-            }
-        }
-    }
-    static UpdateBounds(bounds, points) {
-        let xMin = Number.MAX_VALUE,
-            xMax = Number.MIN_VALUE,
-            yMin = Number.MAX_VALUE,
-            yMax = Number.MIN_VALUE
-
-        for(let point of points) {
-            if(point.x < xMin) xMin = point.x
-            if(point.x > xMax) xMax = point.x
-            if(point.y < yMin) yMin = point.y
-            if(point.y < yMax) yMax = point.y
-        }
-
-        bounds.min.x = xMin
-        bounds.min.y = yMin
-        bounds.max.x = xMax
-        bounds.max.y = yMax
-    }
-
-    static BoundsIntersect(a, b) {
-        return (a.min.x <= b.max.x && a.max.x >= b.min.x
-            && a.max.y >= b.min.y && a.min.y <= b.max.y)
-    }
-    static ContainsPoint(bounds, point) {
-        return point.x >= bounds.min.x && point.x <= bounds.max.x && point.y >= bounds.min.y && point.y <= bounds.max.y
-    }
-}
-
-class Graphic extends Component {
-    constructor() {
-        this.graphic = new PIXI.Graphics()
-    }
-    DrawAABB(bounds, solid, color = 0xffffff) {
-        let width = bounds.max.x - bounds.min.x,
-            height = bounds.max.y - bounds.min.y
-        if(solid) {
-            this.graphic.beginFill(color)
-        } else {
-            this.graphic.lineStyle(4, color)
-        }
-        this.graphic.drawRect(bounds.min.x, bounds.min.y, width, height)
-        this.graphic.endFill()
-        World.stage.addChild(this.graphic)
-    }
-    removal() {
-        World.stage.removeChild(this.graphic)
-    }
-}
-
 class Vector2 {
     constructor(x, y) {
         this.x = x || 0;
@@ -470,6 +214,402 @@ class Vector2 {
         this.x = v.x
         this.y = v.y
         return this
+    }
+}
+
+class QuadTree {
+    constructor(rect, n, max_depth, depth) {
+        this.bounds = rect
+        this.size = n
+        this.max_depth = max_depth
+        this.depth = depth
+        this.objects = []
+    }
+
+    split() {
+        let midX = this.bounds.bounds.min.x + (this.bounds.bounds.max.x - this.bounds.bounds.min.x) / 2,
+            midY = this.bounds.bounds.min.y + (this.bounds.bounds.max.y - this.bounds.bounds.min.y) / 2
+        let rectTL = new Collider([new Vector2(this.bounds.bounds.min.x, this.bounds.bounds.min.y),
+        new Vector2(midX, this.bounds.bounds.min.y),
+        new Vector2(midX, midY),
+        new Vector2(this.bounds.bounds.min.x, midY)])
+        let rectTR = new Collider([new Vector2(midX, this.bounds.bounds.min.y),
+        new Vector2(this.bounds.bounds.max.x, this.bounds.bounds.min.y),
+        new Vector2(this.bounds.bounds.max.x, midY),
+        new Vector2(midX, midY)])
+        let rectBL = new Collider([new Vector2(midX, midY),
+        new Vector2(this.bounds.bounds.max.x, midY),
+        new Vector2(this.bounds.bounds.max.x, this.bounds.bounds.max.y),
+        new Vector2(midX, this.bounds.bounds.max.y)])
+        let rectBR = new Collider([new Vector2(this.bounds.bounds.min.x, midY),
+        new Vector2(midX, midY),
+        new Vector2(midX, this.bounds.bounds.max.y),
+        new Vector2(this.bounds.bounds.min.x, this.bounds.bounds.max.y)])
+        this.boxTL = new QuadTree(rectTL, this.size, this.max_depth, this.depth + 1)
+        this.boxTR = new QuadTree(rectTR, this.size, this.max_depth, this.depth + 1)
+        this.boxBL = new QuadTree(rectBL, this.size, this.max_depth, this.depth + 1)
+        this.boxBR = new QuadTree(rectBR, this.size, this.max_depth, this.depth + 1)
+        for (let o of this.objects) {
+            this.boxTL.append(o)
+            this.boxTR.append(o)
+            this.boxBL.append(o)
+            this.boxBR.append(o)
+        }
+        this.objects = []
+    }
+
+    append(object) {
+        if (!object instanceof Collider) {
+            return false
+        }
+        if (!Collider.BoundsIntersect(this.bounds.bounds, object.bounds)) {
+            return false
+        }
+        if (this.objects.length < this.size && !this.isSplit) {
+            this.objects.push(object)
+        } else {
+            if (!this.isSplit && this.depth < this.max_depth) {
+                this.split()
+                this.isSplit = true
+            } else {
+                this.objects.push(object)
+                //console.log(this.objects)
+                return
+            }
+            this.boxTL.append(object)
+            this.boxTR.append(object)
+            this.boxBL.append(object)
+            this.boxBR.append(object)
+        }
+    }
+    query(range, type = null) {
+        let result = []
+        if (!Collider.BoundsIntersect(this.bounds, range.bounds)) return result
+
+
+        for (let o of this.objects) {
+            if (Collider.BoundsIntersect(range.bounds, o.bounds)) {
+                if (type) {
+                    if (type == "Bot") {
+                        if (o instanceof Bot) {
+                            result.push(o)
+                        }
+                    }
+                } else {
+                    result.push(o)
+                }
+            }
+        }
+        if (!this.isSplit) return result
+
+        result = result.concat(this.boxTL.query(range))
+        result = result.concat(this.boxTR.query(range))
+        result = result.concat(this.boxBL.query(range))
+        result = result.concat(this.boxBR.query(range))
+        // let tl = this.boxTL.query(range)
+        // let tr = this.boxTR.query(range)
+        // let bl = this.boxBL.query(range)
+        // let br = this.boxBR.query(range)
+        // tl.forEach(result.add, result)
+        // tr.forEach(result.add, result)
+        // bl.forEach(result.add, result)
+        // br.forEach(result.add, result)
+        return result
+    }
+
+    clear() {
+        this.objects = [];
+        if (this.isSplit) {
+            this.boxTL.clear()
+            this.boxTR.clear()
+            this.boxBL.clear()
+            this.boxBR.clear()
+        }
+        this.boxTL = undefined
+        this.boxTR = undefined
+        this.boxBL = undefined
+        this.boxBR = undefined
+        this.isSplit = false
+    }
+}
+
+class GameObject {
+    manager = new ComponentManager(this)
+    constructor() {
+        this.manager.parent = this
+    }
+    addComponent = this.manager.addComponent
+    getComponent = this.manager.getComponent
+    removeComponent = this.manager.removeComponent
+}
+
+class ComponentManager {
+    constructor(parent) {
+        this.parent = parent
+    }
+    components = {}
+    // addComponent = (component) => {
+    //     if (component instanceof Component) {
+    //         this.components[component.constructor.name] = component
+    //         this.components[component.constructor.name].setGameObject(this.parent)
+    //     } else {
+    //         console.error('Error: Component non-existing')
+    //     }
+    // }
+    addComponent = (component, ...args) => {
+        if (typeof component == 'function') {
+            let comp = new component.prototype.constructor(this.parent, ...args)
+            this.components[comp.constructor.name] = comp
+        } else {
+            console.error('Error: Component non-existing')
+        }
+    }
+    getComponent = (identifier) => {
+        return this.components[identifier]
+    }
+    removeComponent = (identifier) => {
+        this.components[identifier].removal()
+        delete this.components[identifier]
+    }
+}
+
+class PhysicsObject extends GameObject {
+    constructor() {
+        this.addComponent(new Transform())
+        this.addComponent(new PhysicsComponent())
+    }
+}
+
+class Component {
+    gameObject
+    constructor(object) {
+        this.gameObject = object
+        this.getComponent = this.gameObject.getComponent
+    }
+    // set gameObject(gameObject) {
+    //     this.gameObject = gameObject
+    // }
+    // get gameObject() {
+    //     return this.gameObject
+    // }
+    removal() {
+        return null
+    }
+}
+
+class Transform extends Component {
+    constructor(parent) {
+        super(parent)
+    }
+    position = new Vector2()
+    rotation = 0
+}
+
+class PhysicsComponent extends Component {
+    gravity = new Vector2(0, 0.1)
+    mass = 1
+    _accel = new Vector2()
+    _vel = new Vector2()
+    constructor(parent) {
+        super(parent)
+        Physics.updates.push(this)
+
+        this.transform = this.getComponent(Transform.name)
+    }
+
+    applyForce(force) {
+        this._accel.add(force.div(this.mass))
+    }
+    update() {
+        this.applyForce(this.gravity)
+
+        this._vel.add(this._accel)
+        this.transform.position.add(this._vel)
+
+        this._accel.mult(0)
+    }
+
+
+
+    set acceleration(acceleration) {
+        this._accel = acceleration
+    }
+    get acceleration() {
+        return this._accel
+    }
+    set velocity(velocity) {
+        this._vel = velocity
+    }
+    get velocity() {
+        return this._vel
+    }
+
+}
+
+class Collider extends Component {
+    constructor(parent, points) {
+        super(parent)
+        this.points = points || []
+        this.bounds = {
+            min: { x: 0, y: 0 },
+            max: { x: 0, y: 0 }
+        }
+        Collider.UpdateBounds(this.bounds, this.points)
+        World.Colliders.push(this)
+    }
+    removal() {
+        for (let i = World.Colliders.length - 1; i >= 0; i--) {
+            if (World.Colliders[i] === this) {
+                return World.Colliders.splice(i, 1)
+            }
+        }
+    }
+    static UpdateBounds(bounds, points) {
+        let xMin = Number.MAX_VALUE,
+            xMax = Number.MIN_VALUE,
+            yMin = Number.MAX_VALUE,
+            yMax = Number.MIN_VALUE
+
+        for (let point of points) {
+            if (point.x < xMin) xMin = point.x
+            if (point.x > xMax) xMax = point.x
+            if (point.y < yMin) yMin = point.y
+            if (point.y < yMax) yMax = point.y
+        }
+
+        bounds.min.x = xMin
+        bounds.min.y = yMin
+        bounds.max.x = xMax
+        bounds.max.y = yMax
+    }
+
+    static BoundsIntersect(a, b) {
+        return (a.min.x <= b.max.x && a.max.x >= b.min.x
+            && a.max.y >= b.min.y && a.min.y <= b.max.y)
+    }
+    static ContainsPoint(bounds, point) {
+        return point.x >= bounds.min.x && point.x <= bounds.max.x && point.y >= bounds.min.y && point.y <= bounds.max.y
+    }
+}
+
+class Graphic extends Component {
+    constructor(parent) {
+        super(parent)
+        this.graphic = new PIXI.Graphics()
+        Renderer.updates.push(this)
+    }
+    DrawAABB(bounds, solid, color = 0xffffff) {
+        let width = bounds.max.x - bounds.min.x,
+            height = bounds.max.y - bounds.min.y
+        if (solid) {
+            this.graphic.beginFill(color)
+        } else {
+            this.graphic.lineStyle(4, color)
+        }
+        this.graphic.drawRect(0, 0, width, height)
+        this.graphic.endFill()
+        World.stage.addChild(this.graphic)
+    }
+    removal() {
+        World.stage.removeChild(this.graphic)
+        for (let i = Renderer.updates.length; i >= 0; i--) {
+            if (Renderer.updates[i] === this) {
+                return Renderer.updates.splice(i, 1)
+            }
+        }
+    }
+}
+
+const World = {
+    stage: undefined,
+    size: new Vector2(400, 400),
+    Colliders: []
+}
+World.bounds = new Collider([new Vector2(0, 0), new Vector2(World.size.x, 0), new Vector2(World.size.x, World.size.y), new Vector2(0, World.size.y)])
+World.tree = new QuadTree(World.bounds, 2, 10, 0)
+
+const Physics = {
+    gravity: 9.81,
+    updates: [],
+    frameRate: 60,
+
+    fpsInterval: 1000 / 60,
+    lastDrawTime: 0,
+    frameCount: 0,
+    //lastSampleTime,
+    requestID: undefined,
+    beginLoop: function () {
+        Physics.fpsInterval = 1000 / Physics.frameRate;
+        Physics.lastDrawTime = performance.now();
+        //this.lastSampleTime = lastDrawTime;
+        Physics.frameCount = 0;
+
+        Physics.loop();
+    },
+    loop: function (now) {
+        Physics.requestID = requestAnimationFrame(Physics.loop);
+
+        let elapsed = now - Physics.lastDrawTime;
+
+        // if enough time has elapsed draw the next frame
+        if (elapsed > Physics.fpsInterval) {
+            Physics.lastDrawTime = now - (elapsed % Physics.fpsInterval);
+            ///////////Do Stuff//////////
+            World.tree.clear()
+            for (let col of World.Colliders) {
+                World.tree.append(col)
+            }
+            for (let obj of Physics.updates) {
+                obj.update()
+            }
+
+            //////////Stop Stuff/////////
+            Physics.frameCount++;
+        }
+    },
+    endLoop: function () {
+        cancelAnimationFrame(Physics.requestID)
+    }
+}
+
+const Renderer = {
+    updates: [],
+    frameRate: 60,
+
+    fpsInterval: 1000 / 60,
+    lastDrawTime: 0,
+    frameCount: 0,
+    //lastSampleTime,
+    requestID: undefined,
+    beginLoop: function () {
+        Renderer.fpsInterval = 1000 / Renderer.frameRate;
+        Renderer.lastDrawTime = performance.now();
+        //this.lastSampleTime = lastDrawTime;
+        Renderer.frameCount = 0;
+
+        Renderer.loop();
+    },
+    loop: function (now) {
+        Renderer.requestID = requestAnimationFrame(Renderer.loop);
+
+        let elapsed = now - Renderer.lastDrawTime;
+
+        // if enough time has elapsed draw the next frame
+        if (elapsed > Renderer.fpsInterval) {
+            Renderer.lastDrawTime = now - (elapsed % Renderer.fpsInterval);
+            ///////////Do Stuff//////////
+
+            for (let obj of Renderer.updates) {
+                let transform = obj.getComponent(Transform.name)
+                let graphic = obj.getComponent(Graphic.name)
+                graphic.graphic.position = transform.position
+            }
+            //////////Stop Stuff/////////
+            Renderer.frameCount++;
+        }
+    },
+    endLoop: function () {
+        cancelAnimationFrame(Renderer.requestID)
     }
 }
 
@@ -697,121 +837,7 @@ class radius {
     }
 }
 
-class QuadTree {
-    constructor(rect, n, max_depth, depth) {
-        this.bounds = rect
-        this.size = n
-        this.max_depth = max_depth
-        this.depth = depth
-        this.objects = []
-    }
 
-    split() {
-        let midX = this.bounds.bounds.min.x + (this.bounds.bounds.max.x - this.bounds.bounds.min.x) / 2,
-            midY = this.bounds.bounds.min.y + (this.bounds.bounds.max.y - this.bounds.bounds.min.y) / 2
-        let rectTL = new Collider([new Vector2(this.bounds.bounds.min.x, this.bounds.bounds.min.y), 
-                                new Vector2(midX, this.bounds.bounds.min.y), 
-                                new Vector2(midX, midY), 
-                                new Vector2(this.bounds.bounds.min.x, midY)])
-        let rectTR = new Collider([new Vector2(midX, this.bounds.bounds.min.y), 
-                                new Vector2(this.bounds.bounds.max.x, this.bounds.bounds.min.y), 
-                                new Vector2(this.bounds.bounds.max.x, midY), 
-                                new Vector2(midX, midY)])
-        let rectBL = new Collider([new Vector2(midX, midY), 
-                                new Vector2(this.bounds.bounds.max.x, midY), 
-                                new Vector2(this.bounds.bounds.max.x, this.bounds.bounds.max.y), 
-                                new Vector2(midX, this.bounds.bounds.max.y)])
-        let rectBR = new Collider([new Vector2(this.bounds.bounds.min.x, midY), 
-                                new Vector2(midX, midY), 
-                                new Vector2(midX, this.bounds.bounds.max.y), 
-                                new Vector2(this.bounds.bounds.min.x, this.bounds.bounds.max.y)])
-        this.boxTL = new QuadTree(rectTL, this.size, this.max_depth, this.depth + 1)
-        this.boxTR = new QuadTree(rectTR, this.size, this.max_depth, this.depth + 1)
-        this.boxBL = new QuadTree(rectBL, this.size, this.max_depth, this.depth + 1)
-        this.boxBR = new QuadTree(rectBR, this.size, this.max_depth, this.depth + 1)
-        for (let o of this.objects) {
-            this.boxTL.append(o)
-            this.boxTR.append(o)
-            this.boxBL.append(o)
-            this.boxBR.append(o)
-        }
-        this.objects = []
-    }
-
-    append(object) {
-        if (!object instanceof Collider) {
-            return false
-        }
-        if (!Collider.BoundsIntersect(this.bounds.bounds, object.bounds)) {
-            return false
-        }
-        if (this.objects.length < this.size && !this.isSplit) {
-            this.objects.push(object)
-        } else {
-            if (!this.isSplit && this.depth < this.max_depth) {
-                this.split()
-                this.isSplit = true
-            } else {
-                this.objects.push(object)
-                //console.log(this.objects)
-                return
-            }
-            this.boxTL.append(object)
-            this.boxTR.append(object)
-            this.boxBL.append(object)
-            this.boxBR.append(object)
-        }
-    }
-    query(range, type = null) {
-        let result = []
-        if (!Collider.BoundsIntersect(this.bounds, range.bounds)) return result
-
-
-        for (let o of this.objects) {
-            if (Collider.BoundsIntersect(range.bounds, o.bounds)) {
-                if (type) {
-                    if (type == "Bot") {
-                        if (o instanceof Bot) {
-                            result.push(o)
-                        }
-                    }
-                } else {
-                    result.push(o)
-                }
-            }
-        }
-        if (!this.isSplit) return result
-
-        result = result.concat(this.boxTL.query(range))
-        result = result.concat(this.boxTR.query(range))
-        result = result.concat(this.boxBL.query(range))
-        result = result.concat(this.boxBR.query(range))
-        // let tl = this.boxTL.query(range)
-        // let tr = this.boxTR.query(range)
-        // let bl = this.boxBL.query(range)
-        // let br = this.boxBR.query(range)
-        // tl.forEach(result.add, result)
-        // tr.forEach(result.add, result)
-        // bl.forEach(result.add, result)
-        // br.forEach(result.add, result)
-        return result
-    }
-
-    clear() {
-        this.objects = [];
-        if (this.isSplit) {
-            this.boxTL.clear()
-            this.boxTR.clear()
-            this.boxBL.clear()
-            this.boxBR.clear()
-        }
-        this.boxTL = undefined
-        this.boxTR = undefined
-        this.boxBL = undefined
-        this.boxBR = undefined
-        this.isSplit = false
-    }
-}
 
 class Response {
     constructor() {

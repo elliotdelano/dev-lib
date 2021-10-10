@@ -22,3 +22,12 @@ document.body.appendChild(view);
 stage.addChild(viewport)
 
 World.stage = stage
+Physics.beginLoop()
+Renderer.beginLoop()
+
+let g = new GameObject()
+g.addComponent(Transform)
+g.addComponent(Collider, [new Vector2(200, 200), new Vector2(400, 200), new Vector2(400, 400), new Vector2(200, 400)])
+g.addComponent(PhysicsComponent)
+g.addComponent(Graphic)
+g.getComponent(Graphic.name).DrawAABB(g.getComponent(Collider.name).bounds)
