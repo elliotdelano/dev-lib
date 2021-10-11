@@ -2,8 +2,8 @@ const canvas = document.getElementById('canvas');
 
 const app = new PIXI.Application({
     view: canvas,
-    width: 1000,
-    height: 1000
+    width: 700,
+    height: 700
 });
 
 const { stage, view, ticker, renderer } = app;
@@ -21,13 +21,22 @@ document.body.appendChild(view);
 
 stage.addChild(viewport)
 
-World.stage = stage
+World.stage = viewport
+World.size = new Vector2(700, 700)
 Physics.beginLoop()
 Renderer.beginLoop()
 
 let g = new GameObject()
 g.addComponent(Transform)
-g.addComponent(Collider, [new Vector2(200, 200), new Vector2(400, 200), new Vector2(400, 400), new Vector2(200, 400)])
+g.getComponent(Transform).position.set(200, 0)
+g.addComponent(PolygonCollider, [new Vector2(-100, -100), new Vector2(100, -100), new Vector2(100, 100), new Vector2(-100, 100)])
 g.addComponent(PhysicsComponent)
 g.addComponent(Graphic)
-g.getComponent(Graphic.name).DrawAABB(g.getComponent(Collider.name).bounds)
+g.getComponent(Graphic).DrawPolygon(g.getComponent(PolygonCollider).points)
+
+let floor = new GameObject()
+floor.addComponent(Transform)
+floor.getComponent(Transform).position.set(350, 600)
+floor.addComponent(PolygonCollider, [new Vector2(-300, -20), new Vector2(300, -20), new Vector2(300, 20), new Vector2(-300, 20)])
+floor.addComponent(Graphic)
+floor.getComponent(Graphic).DrawPolygon(floor.getComponent(PolygonCollider).points)

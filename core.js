@@ -217,6 +217,23 @@ class Vector2 {
     }
 }
 
+class Response {
+    constructor() {
+        this.a = null
+        this.b = null
+        this.overlapN = new Vector2()
+        this.overlapV = new Vector2()
+        this.clear()
+    }
+
+    clear() {
+        this.aInB = true
+        this.bInA = true
+        this.overlap = Number.MAX_VALUE
+        return this
+    }
+}
+
 class QuadTree {
     constructor(rect, n, max_depth, depth) {
         this.bounds = rect
@@ -229,22 +246,10 @@ class QuadTree {
     split() {
         let midX = this.bounds.bounds.min.x + (this.bounds.bounds.max.x - this.bounds.bounds.min.x) / 2,
             midY = this.bounds.bounds.min.y + (this.bounds.bounds.max.y - this.bounds.bounds.min.y) / 2
-        let rectTL = new Collider([new Vector2(this.bounds.bounds.min.x, this.bounds.bounds.min.y),
-        new Vector2(midX, this.bounds.bounds.min.y),
-        new Vector2(midX, midY),
-        new Vector2(this.bounds.bounds.min.x, midY)])
-        let rectTR = new Collider([new Vector2(midX, this.bounds.bounds.min.y),
-        new Vector2(this.bounds.bounds.max.x, this.bounds.bounds.min.y),
-        new Vector2(this.bounds.bounds.max.x, midY),
-        new Vector2(midX, midY)])
-        let rectBL = new Collider([new Vector2(midX, midY),
-        new Vector2(this.bounds.bounds.max.x, midY),
-        new Vector2(this.bounds.bounds.max.x, this.bounds.bounds.max.y),
-        new Vector2(midX, this.bounds.bounds.max.y)])
-        let rectBR = new Collider([new Vector2(this.bounds.bounds.min.x, midY),
-        new Vector2(midX, midY),
-        new Vector2(midX, this.bounds.bounds.max.y),
-        new Vector2(this.bounds.bounds.min.x, this.bounds.bounds.max.y)])
+        let rectTL = new Bounds(this.bounds.bounds.min.x, this.bounds.bounds.min.y, midX, midY)
+        let rectTR = new Bounds(midX, this.bounds.bounds.min.y, this.bounds.bounds.max.x, midY)
+        let rectBL = new Bounds(midX, midY, this.bounds.bounds.max.x, this.bounds.bounds.max.y)
+        let rectBR = new Bounds(this.bounds.bounds.min.x, midY, midX, this.bounds.bounds.max.y)
         this.boxTL = new QuadTree(rectTL, this.size, this.max_depth, this.depth + 1)
         this.boxTR = new QuadTree(rectTR, this.size, this.max_depth, this.depth + 1)
         this.boxBL = new QuadTree(rectBL, this.size, this.max_depth, this.depth + 1)
@@ -262,7 +267,7 @@ class QuadTree {
         if (!object instanceof Collider) {
             return false
         }
-        if (!Collider.BoundsIntersect(this.bounds.bounds, object.bounds)) {
+        if (!Bounds.Intersect(this.bounds, object.bounds)) {
             return false
         }
         if (this.objects.length < this.size && !this.isSplit) {
@@ -284,11 +289,11 @@ class QuadTree {
     }
     query(range, type = null) {
         let result = []
-        if (!Collider.BoundsIntersect(this.bounds, range.bounds)) return result
+        if (!Bounds.Intersect(this.bounds, range)) return result
 
 
         for (let o of this.objects) {
-            if (Collider.BoundsIntersect(range.bounds, o.bounds)) {
+            if (Bounds.Intersect(range, o.bounds)) {
                 if (type) {
                     if (type == "Bot") {
                         if (o instanceof Bot) {
@@ -333,6 +338,20 @@ class QuadTree {
     }
 }
 
+class Bounds {
+    constructor(minX, minY, maxX, maxY) {
+        this.min = new Vector2(minX, minY)
+        this.max = new Vector2(maxX, maxY)
+    }
+    static Intersect(a, b) {
+        return (a.min.x <= b.max.x && a.max.x >= b.min.x
+            && a.max.y >= b.min.y && a.min.y <= b.max.y)
+    }
+    static ContainsPoint(bounds, point) {
+        return point.x >= bounds.min.x && point.x <= bounds.max.x && point.y >= bounds.min.y && point.y <= bounds.max.y
+    }
+}
+
 class GameObject {
     manager = new ComponentManager(this)
     constructor() {
@@ -365,11 +384,11 @@ class ComponentManager {
         }
     }
     getComponent = (identifier) => {
-        return this.components[identifier]
+        return this.components[identifier.name]
     }
     removeComponent = (identifier) => {
-        this.components[identifier].removal()
-        delete this.components[identifier]
+        this.components[identifier.name].removal()
+        delete this.components[identifier.name]
     }
 }
 
@@ -414,7 +433,7 @@ class PhysicsComponent extends Component {
         super(parent)
         Physics.updates.push(this)
 
-        this.transform = this.getComponent(Transform.name)
+        this.transform = this.getComponent(Transform)
     }
 
     applyForce(force) {
@@ -425,6 +444,9 @@ class PhysicsComponent extends Component {
 
         this._vel.add(this._accel)
         this.transform.position.add(this._vel)
+
+        let col = this.getComponent(Collider)
+        if (col) Collider.UpdateBounds(col.bounds, col.points, this.transform)
 
         this._accel.mult(0)
     }
@@ -450,11 +472,9 @@ class Collider extends Component {
     constructor(parent, points) {
         super(parent)
         this.points = points || []
-        this.bounds = {
-            min: { x: 0, y: 0 },
-            max: { x: 0, y: 0 }
-        }
-        Collider.UpdateBounds(this.bounds, this.points)
+        this.bounds = new Bounds()
+        this.transform = this.getComponent(Transform)
+        Collider.UpdateBounds(this.bounds, this.points, this.transform)
         World.Colliders.push(this)
     }
     removal() {
@@ -464,17 +484,27 @@ class Collider extends Component {
             }
         }
     }
-    static UpdateBounds(bounds, points) {
+    static UpdateBounds(bounds, points_i, transform) {
         let xMin = Number.MAX_VALUE,
             xMax = Number.MIN_VALUE,
             yMin = Number.MAX_VALUE,
             yMax = Number.MIN_VALUE
 
+        let points = points_i
+
+
         for (let point of points) {
             if (point.x < xMin) xMin = point.x
             if (point.x > xMax) xMax = point.x
             if (point.y < yMin) yMin = point.y
-            if (point.y < yMax) yMax = point.y
+            if (point.y > yMax) yMax = point.y
+        }
+
+        if (transform) {
+            xMin += transform.position.x
+            xMax += transform.position.x
+            yMin += transform.position.y
+            yMax += transform.position.y
         }
 
         bounds.min.x = xMin
@@ -482,13 +512,95 @@ class Collider extends Component {
         bounds.max.x = xMax
         bounds.max.y = yMax
     }
+}
 
-    static BoundsIntersect(a, b) {
-        return (a.min.x <= b.max.x && a.max.x >= b.min.x
-            && a.max.y >= b.min.y && a.min.y <= b.max.y)
+class PolygonCollider extends Collider {
+    constructor(parent, points) {
+        super(parent, points)
+        this.setPoints(points)
     }
-    static ContainsPoint(bounds, point) {
-        return point.x >= bounds.min.x && point.x <= bounds.max.x && point.y >= bounds.min.y && point.y <= bounds.max.y
+    setPoints(points) {
+        let lengthChanged = !this.points || this.points.length !== points.length
+        if (lengthChanged) {
+            let i
+            let calcPoints = this.calcPoints = []
+            let edges = this.edges = []
+            let normals = this.normals = []
+
+            for (i = 0; i < points.length; i++) {
+                let p1 = points[i]
+                let p2 = i < points.length - 1 ? points[i + 1] : points[0]
+                if (p1 !== p2 && p1.x === p2.x && p1.y === p2.y) {
+                    points.splice(i, 1)
+                    i -= 1
+                    continue
+                }
+                calcPoints.push(new Vector2())
+                edges.push(new Vector2())
+                normals.push(new Vector2())
+            }
+        }
+        this.points = points
+
+
+        this._recalc()
+        return this
+    }
+    _recalc() {
+        let calcPoints = this.calcPoints;
+        let edges = this.edges;
+        let normals = this.normals;
+        let points = this.points;
+        let offset = this.offset;
+        let angle = this.angle;
+        let len = points.length;
+        console.log(len)
+        for (let i = 0; i < len; i++) {
+            console.log(calcPoints[i])
+            let calcPoint = calcPoints[i].mimic(points[i])
+            calcPoint.x += offset.x
+            calcPoint.y += offset.y
+            if (angle != 0) {
+                calcPoint.setRotation(angle)
+            }
+        }
+
+        for (let i = 0; i < len; i++) {
+            let p1 = calcPoints[i]
+            let p2 = i < len - 1 ? calcPoints[i + 1] : calcPoints[0]
+            let e = edges[i].mimic(p2).sub(p1)
+            normals[i].mimic(e).perp().normalize()
+        }
+
+        return this
+    }
+    setAngle(angle) {
+        this.angle = angle
+        this._recalc()
+        return this
+    }
+
+    setOffset(offset) {
+        this.offset = offset
+        this._recalc()
+        return this
+    }
+
+    rotate(angle) {
+        for (let i = 0; i < this.points.length; i++) {
+            this.points[i].setRotation(angle)
+        }
+        this._recalc()
+        return this
+    }
+
+    translate(x, y) {
+        for (let i = 0; i < this.points.length; i++) {
+            this.points[i].x += x
+            this.points[i].y += y
+        }
+        this._recalc()
+        return this
     }
 }
 
@@ -499,14 +611,30 @@ class Graphic extends Component {
         Renderer.updates.push(this)
     }
     DrawAABB(bounds, solid, color = 0xffffff) {
-        let width = bounds.max.x - bounds.min.x,
-            height = bounds.max.y - bounds.min.y
+        let width = bounds.max.x - bounds.min.x
+        let height = bounds.max.y - bounds.min.y
+        this.graphic.clear()
         if (solid) {
             this.graphic.beginFill(color)
         } else {
             this.graphic.lineStyle(4, color)
         }
         this.graphic.drawRect(0, 0, width, height)
+        this.graphic.endFill()
+        World.stage.addChild(this.graphic)
+    }
+    DrawPolygon(points, solid, color = 0xffffff) {
+        let p_points = []
+        for (let point of points) {
+            p_points.push(new PIXI.Point(point.x, point.y))
+        }
+        this.graphic.clear()
+        if (solid) {
+            this.graphic.beginFill(color)
+        } else {
+            this.graphic.lineStyle(4, color)
+        }
+        this.graphic.drawPolygon(p_points)
         this.graphic.endFill()
         World.stage.addChild(this.graphic)
     }
@@ -525,7 +653,7 @@ const World = {
     size: new Vector2(400, 400),
     Colliders: []
 }
-World.bounds = new Collider([new Vector2(0, 0), new Vector2(World.size.x, 0), new Vector2(World.size.x, World.size.y), new Vector2(0, World.size.y)])
+World.bounds = new Bounds(0, 0, World.size.x, World.size.y)
 World.tree = new QuadTree(World.bounds, 2, 10, 0)
 
 const Physics = {
@@ -538,6 +666,7 @@ const Physics = {
     frameCount: 0,
     //lastSampleTime,
     requestID: undefined,
+    response: new Response(),
     beginLoop: function () {
         Physics.fpsInterval = 1000 / Physics.frameRate;
         Physics.lastDrawTime = performance.now();
@@ -561,6 +690,41 @@ const Physics = {
             }
             for (let obj of Physics.updates) {
                 obj.update()
+            }
+            for (let obj of World.Colliders) {
+                // let range = new Bounds(obj.bounds.min.x - 500, obj.bounds.min.y - 500, obj.bounds.max.x + 500, obj.bounds.max.y + 500)
+                // let colliders = World.tree.query(range)
+                // if (colliders.length <= 0) continue
+                // for (let col of colliders) {
+                //     if (col === obj) continue
+                //     if (Bounds.Intersect(obj.bounds, col.bounds)) {
+                //         console.log('objects colliding')
+                //         let physics = obj.getComponent(PhysicsComponent)
+                //         console.log(physics)
+                //         if (physics) {
+                //             physics.acceleration.mult(0)
+                //             physics.velocity.mult(0)
+                //             physics.gravity.mult(0)
+                //             console.log(physics)
+                //         }
+                //     }
+                // }
+                for (let col of World.Colliders) {
+                    if (obj === col) continue
+
+                    if (Bounds.Intersect(obj.bounds, col.bounds)) {
+                        Physics.response.clear()
+                        if (SAT.testPolygonPolygon(obj, col, Physics.response)) {
+                            obj.transform.position.sub(Physics.response.overlapV)
+                        }
+                        // let physics = obj.getComponent(PhysicsComponent)
+                        // if (physics) {
+                        //     physics.acceleration.mult(0)
+                        //     physics.velocity.mult(0)
+                        //     physics.gravity.mult(0)
+                        // }
+                    }
+                }
             }
 
             //////////Stop Stuff/////////
@@ -600,8 +764,8 @@ const Renderer = {
             ///////////Do Stuff//////////
 
             for (let obj of Renderer.updates) {
-                let transform = obj.getComponent(Transform.name)
-                let graphic = obj.getComponent(Graphic.name)
+                let transform = obj.getComponent(Transform)
+                let graphic = obj.getComponent(Graphic)
                 graphic.graphic.position = transform.position
             }
             //////////Stop Stuff/////////
@@ -612,6 +776,8 @@ const Renderer = {
         cancelAnimationFrame(Renderer.requestID)
     }
 }
+
+const SAT = {}
 
 class Circle {
     constructor(pos, r) {
@@ -633,237 +799,13 @@ class Circle {
     }
 }
 
-class Polygon {
-    constructor(pos, points, width, height, draw) {
-        this.position = pos || new Vector2()
-        this.angle = 0
-        this.offset = new Vector2()
-        this.draw = draw || false
-        this.setPoints(points || [])
-
-        if (width) this.width = width
-        if (height) this.height = height
-    }
-    setPoints(points) {
-        let lengthChanged = !this.points || this.points.length !== points.length
-        if (lengthChanged) {
-            let i
-            let calcPoints = this.calcPoints = []
-            let edges = this.edges = []
-            let normals = this.normals = []
-
-            for (i = 0; i < points.length; i++) {
-                let p1 = points[i]
-                let p2 = i < points.length - 1 ? points[i + 1] : points[0]
-                if (p1 !== p2 && p1.x === p2.x && p1.y === p2.y) {
-                    points.splice(i, 1)
-                    i -= 1
-                    continue
-                }
-                calcPoints.push(new Vector2())
-                edges.push(new Vector2())
-                normals.push(new Vector2())
-            }
-        }
-        this.points = points
-        this._recalc()
-        if (this.draw) {
-            if (!this.graphic) {
-                this.graphic = new PIXI.Graphics()
-                viewport.addChild(this.graphic)
-            }
-
-            this.graphic.clear()
-            this.graphic.position.set(this.position.x, this.position.y)
-            this.graphic.lineStyle(4, 0xffffff)
-            this.graphic.moveTo(this.points[this.points.length - 1].x, this.points[this.points.length - 1].y)
-            for (let pt of this.points) {
-                this.graphic.lineTo(pt.x, pt.y)
-            }
-        }
-        return this
-    }
-    setAngle(angle) {
-        this.angle = angle
-        this._recalc()
-        return this
-    }
-
-    setOffset(offset) {
-        this.offset = offset
-        this._recalc()
-        return this
-    }
-
-    rotate(angle) {
-        for (let i = 0; i < this.points.length; i++) {
-            this.points[i].setRotation(angle)
-        }
-        this._recalc()
-        return this
-    }
-
-    translate(x, y) {
-        for (let i = 0; i < this.points.length; i++) {
-            this.points[i].x += x
-            this.points[i].y += y
-        }
-        this._recalc()
-        return this
-    }
-
-    _recalc() {
-        let calcPoints = this.calcPoints;
-        let edges = this.edges;
-        let normals = this.normals;
-        let points = this.points;
-        let offset = this.offset;
-        let angle = this.angle;
-        let len = points.length;
-
-        for (let i = 0; i < len; i++) {
-            let calcPoint = calcPoints[i].mimic(points[i])
-            calcPoint.x += offset.x
-            calcPoint.y += offset.y
-            if (angle != 0) {
-                calcPoint.setRotation(angle)
-            }
-        }
-
-        for (let i = 0; i < len; i++) {
-            let p1 = calcPoints[i]
-            let p2 = i < len - 1 ? calcPoints[i + 1] : calcPoints[0]
-            let e = edges[i].mimic(p2).sub(p1)
-            normals[i].mimic(e).perp().normalize()
-        }
-        return this
-    }
-
-    getAABBAsBox() {
-        let points = this.calcPoints
-        let len = points.length;
-        let xMin = points[0].x
-        let yMin = points[0].y
-        let xMax = points[0].x
-        let yMax = points[0].y
-        for (let i = 1; i < len; i++) {
-            let point = points[i];
-            if (point.x < xMin) {
-                xMin = point.x
-            }
-            else if (point.x > xMax) {
-                xMax = point.x
-            }
-            if (point.y < yMin) {
-                yMin = point.y
-            }
-            else if (point.y > yMax) {
-                yMax = point.y
-            }
-        }
-        return new Box(this.position.copy().add(new Vector2(xMin, yMin)), xMax - xMin, yMax - yMin)
-    }
-
-    getAABB() {
-        return this.getAABBAsBox().toPolygon()
-    }
-
-    getCentroid() {
-        let points = this.calcPoints
-        let cx = 0
-        let cy = 0
-        let ar = 0
-        for (let i = 0; i < points.length; i++) {
-            let p1 = points[i]
-            let p2 = i === len - 1 ? points[0] : points[i + 1]
-            let a = p1.x * p2.y - p2.x * p1.y
-            cx += (p1.x + p2.x) * a
-            cy += (p1.y + p2.y) * a
-            ar += a
-        }
-        ar = ar * 3
-        cx = cx / ar
-        cy = cy / ar
-        return new Vector2(cx, cy)
-    }
-}
-
-class Box {
-    constructor(pos, w, h, draw) {
-        this.position = pos || new Vector2()
-        this.width = w || 0
-        this.height = h || 0
-
-        if (draw) {
-            this.draw()
-        }
-        //console.log(this)
-    }
-
-    toPolygon() {
-        let pos = this.position
-        let w = this.width
-        let h = this.height
-        return new Polygon(new Vector2(pos.x, pos.y), [
-            new Vector2(), new Vector2(w, 0),
-            new Vector2(w, h), new Vector2(0, h)
-        ], w, h)
-    }
-    intersectsRect(other) {
-        return !(other.position.x > this.position.x + this.width ||
-            other.position.x + other.width < this.position.x ||
-            other.position.y > this.position.y + this.height ||
-            other.position.y + other.height < this.position.y)
-    }
-    draw() {
-        this.box = new PIXI.Graphics()
-        this.box.lineStyle(3, 0xffffff)
-        this.box.drawRect(0, 0, this.width, this.height)
-        viewport.addChild(this.box)
-        //this.box.zIndex = 20
-        this.box.position.set(this.position.x, this.position.y)
-    }
-}
-
-class radius {
-    position
-    constructor(x, y, r) {
-        this.position = new Vector2(x, y)
-        this.r = r
-    }
-    within(point) {
-        let dist = Math.sqrt(Math.pow((point.position.x - this.position.x), 2) + Math.pow((point.position.y - this.position.y), 2))
-        return dist <= (point.size + this.r)
-    }
-}
-
-
-
-class Response {
-    constructor() {
-        this.a = null
-        this.b = null
-        this.overlapN = new Vector2()
-        this.overlapV = new Vector2()
-        this.clear()
-    }
-
-    clear() {
-        this.aInB = true
-        this.bInA = true
-        this.overlap = Number.MAX_VALUE
-        return this
-    }
-}
-
 var T_VECTORS = []
 for (let i = 0; i < 10; i++) T_VECTORS.push(new Vector2())
 var T_ARRAYS = []
 for (let i = 0; i < 5; i++) T_ARRAYS.push([])
 var T_RESPONSE = new Response()
-var TEST_POINT = new Box(new Vector2(), 0.000001, 0.000001).toPolygon()
 
-function flattenPointsOn(points, normal, result) {
+SAT.flattenPointsOn = function (points, normal, result) {
     let min = Number.MAX_VALUE
     let max = -Number.MAX_VALUE
     for (let i = 0; i < points.length; i++) {
@@ -874,18 +816,15 @@ function flattenPointsOn(points, normal, result) {
     result[0] = min; result[1] = max
 }
 
-function isSeparatingAxis(aPos, bPos, aPoints, bPoints, axis, response) {
+SAT.isSeparatingAxis = function (aPos, bPos, aPoints, bPoints, axis, response) {
     let rangeA = []
     let rangeB = []
 
     let offsetV = bPos.copy().sub(aPos)
     let projectedOffset = offsetV.dot(axis)
 
-    //let offsetV2 = aPos.copy().sub(bPos)
-    //let projectedOffset2 = offsetV2.dot(axis)
-
-    flattenPointsOn(aPoints, axis, rangeA)
-    flattenPointsOn(bPoints, axis, rangeB)
+    SAT.flattenPointsOn(aPoints, axis, rangeA)
+    SAT.flattenPointsOn(bPoints, axis, rangeB)
 
     //rangeA[0] -= projectedOffset2
     //rangeA[1] -= projectedOffset2
@@ -938,7 +877,7 @@ var LEFT_VORONOI_REGION = -1
 var MIDDLE_VORONOI_REGION = 0
 var RIGHT_VORONOI_REGION = 1
 
-function voronoiRegion(line, point) {
+SAT.voronoiRegion = function (line, point) {
     let len2 = line.len2()
     let dp = point.dot(line)
 
@@ -950,26 +889,26 @@ function voronoiRegion(line, point) {
         return MIDDLE_VORONOI_REGION
 }
 
-function pointInCircle(p, c) {
-    let differenceV = T_VECTORS.pop().mimic(p).sub(c.position).sub(c.offset)
+SAT.pointInCircle = function (p, c) {
+    let differenceV = T_VECTORS.pop().mimic(p).sub(c.transform.position).sub(c.offset)
     let radiusSq = c.r * c.r
     let distanceSq = differenceV.len2()
     T_VECTORS.push(differenceV)
     return distanceSq <= radiusSq
 }
 
-function pointInPolygon(p, poly) {
+SAT.pointInPolygon = function (p, poly) {
     TEST_POINT.position.mimic(p)
     T_RESPONSE.clear()
-    let result = testPolygonPolygon(TEST_POINT, poly, T_RESPONSE)
+    let result = SAT.testPolygonPolygon(TEST_POINT, poly, T_RESPONSE)
     if (result) {
         result = T_RESPONSE.aInB
     }
     return result
 }
 
-function testCircleCircle(a, b, response) {
-    let differenceV = T_VECTORS.pop().mimic(b.position).add(b.offset).sub(a.position).sub(a.offset)
+SAT.testCircleCircle = function (a, b, response) {
+    let differenceV = T_VECTORS.pop().mimic(b.transform.position).add(b.offset).sub(a.transform.position).sub(a.offset)
     let totalRadius = a.r + b.r
     let totalRadiusSq = totalRadius * totalRadius
     let distanceSq = differenceV.len2()
@@ -993,8 +932,8 @@ function testCircleCircle(a, b, response) {
     return true
 }
 
-function testPolygonCircle(polygon, circle, response) {
-    var circlePos = T_VECTORS.pop().copy(circle.pos).add(circle.offset).sub(polygon.pos);
+SAT.testPolygonCircle = function (polygon, circle, response) {
+    var circlePos = T_VECTORS.pop().copy(circle.pos).add(circle.offset).sub(polygon.transform.position);
     var radius = circle.r;
     var radius2 = radius * radius;
     var points = polygon.calcPoints;
@@ -1015,11 +954,11 @@ function testPolygonCircle(polygon, circle, response) {
             response.aInB = false;
         }
 
-        var region = voronoiRegion(edge, point);
+        var region = SAT.voronoiRegion(edge, point);
         if (region === LEFT_VORONOI_REGION) {
             edge.copy(polygon.edges[prev]);
             var point2 = T_VECTORS.pop().copy(circlePos).sub(points[prev]);
-            region = voronoiRegion(edge, point2);
+            region = SAT.voronoiRegion(edge, point2);
             if (region === RIGHT_VORONOI_REGION) {
                 var dist = point.len();
                 if (dist > radius) {
@@ -1038,7 +977,7 @@ function testPolygonCircle(polygon, circle, response) {
         } else if (region === RIGHT_VORONOI_REGION) {
             edge.copy(polygon.edges[next]);
             point.copy(circlePos).sub(points[next]);
-            region = voronoiRegion(edge, point);
+            region = SAT.voronoiRegion(edge, point);
             if (region === LEFT_VORONOI_REGION) {
                 var dist = point.len();
                 if (dist > radius) {
@@ -1086,8 +1025,8 @@ function testPolygonCircle(polygon, circle, response) {
     return true;
 }
 
-function testCirclePolygon(circle, polygon, response) {
-    var result = testPolygonCircle(polygon, circle, response)
+SAT.testCirclePolygon = function (circle, polygon, response) {
+    var result = SAT.testPolygonCircle(polygon, circle, response)
     if (result && response) {
         let a = response.a
         let aInB = response.aInB
@@ -1101,19 +1040,19 @@ function testCirclePolygon(circle, polygon, response) {
     return result
 }
 
-function testPolygonPolygon(a, b, response) {
+SAT.testPolygonPolygon = function (a, b, response) {
     let aPoints = a.calcPoints
     let bPoints = b.calcPoints
 
     //console.log(a.normals)
     for (let i = 0; i < a.normals.length; i++) {
-        if (isSeparatingAxis(a.position, b.position, aPoints, bPoints, a.normals[i], response)) {
+        if (SAT.isSeparatingAxis(a.transform.position, b.transform.position, aPoints, bPoints, a.normals[i], response)) {
             return false
         }
     }
 
     for (let i = 0; i < b.normals.length; i++) {
-        if (isSeparatingAxis(a.position, b.position, aPoints, bPoints, b.normals[i], response)) {
+        if (SAT.isSeparatingAxis(a.transform.position, b.transform.position, aPoints, bPoints, b.normals[i], response)) {
             return false
         }
     }
