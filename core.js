@@ -517,10 +517,13 @@ class Collider extends Component {
 class PolygonCollider extends Collider {
     constructor(parent, points) {
         super(parent, points)
+        this.angle = 0
+        this.offset = new Vector2()
         this.setPoints(points)
     }
     setPoints(points) {
-        let lengthChanged = !this.points || this.points.length !== points.length
+        //let lengthChanged = !this.points || this.points.length !== points.length
+        let lengthChanged = true
         if (lengthChanged) {
             let i
             let calcPoints = this.calcPoints = []
@@ -541,7 +544,7 @@ class PolygonCollider extends Collider {
             }
         }
         this.points = points
-
+        console.log(lengthChanged)
 
         this._recalc()
         return this
@@ -556,7 +559,7 @@ class PolygonCollider extends Collider {
         let len = points.length;
         console.log(len)
         for (let i = 0; i < len; i++) {
-            console.log(calcPoints[i])
+            console.log(calcPoints.length)
             let calcPoint = calcPoints[i].mimic(points[i])
             calcPoint.x += offset.x
             calcPoint.y += offset.y
@@ -715,6 +718,7 @@ const Physics = {
                     if (Bounds.Intersect(obj.bounds, col.bounds)) {
                         Physics.response.clear()
                         if (SAT.testPolygonPolygon(obj, col, Physics.response)) {
+                            console.log('collision')
                             obj.transform.position.sub(Physics.response.overlapV)
                         }
                         // let physics = obj.getComponent(PhysicsComponent)

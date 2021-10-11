@@ -28,7 +28,7 @@ Renderer.beginLoop()
 
 let g = new GameObject()
 g.addComponent(Transform)
-g.getComponent(Transform).position.set(200, 0)
+g.getComponent(Transform).position.set(200, 500)
 g.addComponent(PolygonCollider, [new Vector2(-100, -100), new Vector2(100, -100), new Vector2(100, 100), new Vector2(-100, 100)])
 g.addComponent(PhysicsComponent)
 g.addComponent(Graphic)
