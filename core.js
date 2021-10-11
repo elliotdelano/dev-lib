@@ -445,7 +445,7 @@ class PhysicsComponent extends Component {
         this._vel.add(this._accel)
         this.transform.position.add(this._vel)
 
-        let col = this.getComponent(Collider)
+        let col = this.getComponent(Collider) || this.getComponent(PolygonCollider)
         if (col) Collider.UpdateBounds(col.bounds, col.points, this.transform)
 
         this._accel.mult(0)
@@ -544,7 +544,6 @@ class PolygonCollider extends Collider {
             }
         }
         this.points = points
-        console.log(lengthChanged)
 
         this._recalc()
         return this
@@ -557,9 +556,7 @@ class PolygonCollider extends Collider {
         let offset = this.offset;
         let angle = this.angle;
         let len = points.length;
-        console.log(len)
         for (let i = 0; i < len; i++) {
-            console.log(calcPoints.length)
             let calcPoint = calcPoints[i].mimic(points[i])
             calcPoint.x += offset.x
             calcPoint.y += offset.y
@@ -687,10 +684,10 @@ const Physics = {
         if (elapsed > Physics.fpsInterval) {
             Physics.lastDrawTime = now - (elapsed % Physics.fpsInterval);
             ///////////Do Stuff//////////
-            World.tree.clear()
-            for (let col of World.Colliders) {
-                World.tree.append(col)
-            }
+            //World.tree.clear()
+            // for (let col of World.Colliders) {
+            //     World.tree.append(col)
+            // }
             for (let obj of Physics.updates) {
                 obj.update()
             }
@@ -716,9 +713,15 @@ const Physics = {
                     if (obj === col) continue
 
                     if (Bounds.Intersect(obj.bounds, col.bounds)) {
+                        //console.log('Broadphase Collision')
                         Physics.response.clear()
                         if (SAT.testPolygonPolygon(obj, col, Physics.response)) {
-                            console.log('collision')
+                            //console.log('Precise Collision')
+                            let physics = obj.getComponent(PhysicsComponent)
+                            if (physics) {
+                                physics.velocity.mult(0)
+                            }
+
                             obj.transform.position.sub(Physics.response.overlapV)
                         }
                         // let physics = obj.getComponent(PhysicsComponent)
@@ -824,7 +827,8 @@ SAT.isSeparatingAxis = function (aPos, bPos, aPoints, bPoints, axis, response) {
     let rangeA = []
     let rangeB = []
 
-    let offsetV = bPos.copy().sub(aPos)
+    let offsetV = Vector2.sub(bPos, aPos)
+    //console.log(offsetV)
     let projectedOffset = offsetV.dot(axis)
 
     SAT.flattenPointsOn(aPoints, axis, rangeA)
