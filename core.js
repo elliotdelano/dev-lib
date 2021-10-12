@@ -421,7 +421,9 @@ class Transform extends Component {
         super(parent)
     }
     position = new Vector2()
+    positionPrevious = this.position
     rotation = 0
+    rotationPrevious = this.rotation
 }
 
 class PhysicsComponent extends Component {
@@ -437,16 +439,25 @@ class PhysicsComponent extends Component {
     }
 
     applyForce(force) {
-        this._accel.add(force.div(this.mass))
+        this._accel.add(force)
     }
     update() {
         this.applyForce(this.gravity)
 
-        this._vel.add(this._accel)
+        this._vel.add(this._accel.div(this.mass))
         this.transform.position.add(this._vel)
 
+        this._velAng = (this.transform.rotation - this.transform.rotationPrevious)
+        this.transform.rotationPrevious = this.transform.rotation
+        this.transform.rotation += this._velAng
+
         let col = this.getComponent(Collider) || this.getComponent(PolygonCollider)
-        if (col) Collider.UpdateBounds(col.bounds, col.points, this.transform)
+        if (col) {
+            if (col instanceof PolygonCollider) {
+                col.rotate(this.transform.rotation)
+            }
+            Collider.UpdateBounds(col.bounds, col.points, this.transform)
+        }
 
         this._accel.mult(0)
     }

@@ -28,7 +28,7 @@ Renderer.beginLoop()
 
 let boxA = new GameObject()
 boxA.addComponent(Transform)
-boxA.getComponent(Transform).position.set(200, 200)
+boxA.getComponent(Transform).position.set(350, -500)
 boxA.addComponent(PolygonCollider, [new Vector2(-100, -100), new Vector2(100, -100), new Vector2(100, 100), new Vector2(-100, 100)])
 boxA.addComponent(PhysicsComponent)
 boxA.addComponent(Graphic)
@@ -36,7 +36,7 @@ boxA.getComponent(Graphic).DrawPolygon(boxA.getComponent(PolygonCollider).points
 
 let boxB = new GameObject()
 boxB.addComponent(Transform)
-boxB.getComponent(Transform).position.set(100, 0)
+boxB.getComponent(Transform).position.set(400, 0)
 boxB.addComponent(PolygonCollider, [new Vector2(-50, -50), new Vector2(50, -50), new Vector2(50, 50), new Vector2(-50, 50)])
 boxB.addComponent(PhysicsComponent)
 boxB.addComponent(Graphic)
@@ -44,7 +44,7 @@ boxB.getComponent(Graphic).DrawPolygon(boxB.getComponent(PolygonCollider).points
 
 let boxC = new GameObject()
 boxC.addComponent(Transform)
-boxC.getComponent(Transform).position.set(100, -200)
+boxC.getComponent(Transform).position.set(400, -200)
 boxC.addComponent(PolygonCollider, [new Vector2(-25, -25), new Vector2(25, -25), new Vector2(25, 25), new Vector2(-25, 25)])
 boxC.addComponent(PhysicsComponent)
 boxC.addComponent(Graphic)
