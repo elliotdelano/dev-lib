@@ -745,6 +745,29 @@ const Physics = {
                 }
             }
 
+            //new area//
+
+            //first update every object with physics
+
+
+            //second clear and update quadtree // https://stackoverflow.com/questions/41946007/efficient-and-well-explained-implementation-of-a-quadtree-for-2d-collision-det
+
+
+            //third search quad tree and get all collision pairs
+
+
+            //fourth iterate over collision pairs and find actual collsions and responses
+
+
+            //fifth iterate over collisions and solve for new positions
+
+
+            //sixth iterate over collisions and solve for new velocities
+
+
+            //seventh clear forces on objects
+
+
             //////////Stop Stuff/////////
             Physics.frameCount++;
         }
@@ -794,6 +817,25 @@ const Renderer = {
         cancelAnimationFrame(Renderer.requestID)
     }
 }
+
+class Collisions {
+    static findCollisionPairs(objects) {
+        let pairs = []
+        for (let i of objects) {
+            for (let j of objects) {
+                if (i !== j) {
+                    if (Bounds.Intersect(i.bounds, j.bounds)) {
+                        if (!pairs.some(pair => ((pair[0] == i && pair[1] == j) || (pair[1] == i && pair[0] == j)))) {
+                            pairs.push([i, j])
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
 
 const SAT = {}
 
