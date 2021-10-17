@@ -338,6 +338,116 @@ class QuadTree {
     }
 }
 
+class LooseQuadTree {
+    constructor(rect, n, max_depth, depth) {
+        this.staticBounds = rect
+        this.bounds = new Bounds(this.staticBounds.min.x, this.staticBounds.min.y, this.staticBounds.max.x, this.staticBounds.max.y)
+        this.size = n
+        this.max_depth = max_depth
+        this.depth = depth
+        this.objects = []
+    }
+    split() {
+        let midX = this.staticBounds.min.x + (this.staticBounds.max.x - this.staticBounds.min.x) / 2,
+            midY = this.staticBounds.min.y + (this.staticBounds.max.y - this.staticBounds.min.y) / 2
+        let rectTL = new Bounds(this.staticBounds.min.x, this.staticBounds.min.y, midX, midY)
+        let rectTR = new Bounds(midX, this.staticBounds.min.y, this.staticBounds.max.x, midY)
+        let rectBL = new Bounds(midX, midY, this.staticBounds.max.x, this.staticBounds.max.y)
+        let rectBR = new Bounds(this.staticBounds.min.x, midY, midX, this.staticBounds.max.y)
+        this.boxTL = new LooseQuadTree(rectTL, this.size, this.max_depth, this.depth + 1)
+        this.boxTR = new LooseQuadTree(rectTR, this.size, this.max_depth, this.depth + 1)
+        this.boxBL = new LooseQuadTree(rectBL, this.size, this.max_depth, this.depth + 1)
+        this.boxBR = new LooseQuadTree(rectBR, this.size, this.max_depth, this.depth + 1)
+        for (let o of this.objects) {
+            this.boxTL.append(o)
+            this.boxTR.append(o)
+            this.boxBL.append(o)
+            this.boxBR.append(o)
+        }
+        this.objects = []
+    }
+
+    append(object) {
+        if (!object instanceof Collider) {
+            return false
+        }
+        if (!Bounds.ContainsPoint(this.staticBounds, object.transform.position)) {
+            return false
+        }
+        if (this.objects.length < this.size && !this.isSplit) {
+            this.objects.push(object)
+
+            Bounds.Expand(this.bounds, object.bounds)
+        } else {
+            if (!this.isSplit && this.depth < this.max_depth) {
+                this.split()
+                this.isSplit = true
+            } else {
+                this.objects.push(object)
+                //console.log(this.objects)
+                return
+            }
+            this.boxTL.append(object)
+            this.boxTR.append(object)
+            this.boxBL.append(object)
+            this.boxBR.append(object)
+        }
+    }
+    query(range, type = null) {
+        let result = []
+        if (!Bounds.Intersect(this.bounds, range)) return result
+
+
+        for (let o of this.objects) {
+            if (Bounds.Intersect(range, o.bounds)) {
+                if (type) {
+                    if (type == "Bot") {
+                        if (o instanceof Bot) {
+                            result.push(o)
+                        }
+                    }
+                } else {
+                    result.push(o)
+                }
+            }
+        }
+        if (!this.isSplit) return result
+
+        result = result.concat(this.boxTL.query(range))
+        result = result.concat(this.boxTR.query(range))
+        result = result.concat(this.boxBL.query(range))
+        result = result.concat(this.boxBR.query(range))
+        // let tl = this.boxTL.query(range)
+        // let tr = this.boxTR.query(range)
+        // let bl = this.boxBL.query(range)
+        // let br = this.boxBR.query(range)
+        // tl.forEach(result.add, result)
+        // tr.forEach(result.add, result)
+        // bl.forEach(result.add, result)
+        // br.forEach(result.add, result)
+        return result
+    }
+
+    clear() {
+        this.objects = [];
+        this.bounds.min.x = this.staticBounds.min.x
+        this.bounds.min.y = this.staticBounds.min.y
+        this.bounds.max.x = this.staticBounds.max.x
+        this.bounds.max.y = this.staticBounds.max.y
+        if (this.isSplit) {
+            this.boxTL.clear()
+            this.boxTR.clear()
+            this.boxBL.clear()
+            this.boxBR.clear()
+        }
+        this.boxTL = undefined
+        this.boxTR = undefined
+        this.boxBL = undefined
+        this.boxBR = undefined
+        this.isSplit = false
+    }
+}
+
 class Bounds {
     constructor(minX, minY, maxX, maxY) {
         this.min = new Vector2(minX, minY)
@@ -349,6 +459,12 @@ class Bounds {
     }
     static ContainsPoint(bounds, point) {
         return point.x >= bounds.min.x && point.x <= bounds.max.x && point.y >= bounds.min.y && point.y <= bounds.max.y
+    }
+    static Expand(bounds, other) {
+        if (bounds.min.x > other.min.x) bounds.min.x = other.min.x
+        if (bounds.min.y > other.min.y) bounds.min.y = other.min.y
+        if (bounds.max.x < other.max.x) bounds.max.x = other.max.x
+        if (bounds.max.y < other.max.y) bounds.max.y = other.max.y
     }
 }
 
@@ -661,11 +777,11 @@ class Graphic extends Component {
 
 const World = {
     stage: undefined,
-    size: new Vector2(400, 400),
+    size: new Vector2(700, 700),
     Colliders: []
 }
 World.bounds = new Bounds(0, 0, World.size.x, World.size.y)
-World.tree = new QuadTree(World.bounds, 2, 10, 0)
+World.tree = new LooseQuadTree(World.bounds, 2, 10, 0)
 
 const Physics = {
     gravity: 9.81,
@@ -699,62 +815,90 @@ const Physics = {
             // for (let col of World.Colliders) {
             //     World.tree.append(col)
             // }
-            for (let obj of Physics.updates) {
-                obj.update()
-            }
-            for (let obj of World.Colliders) {
-                // let range = new Bounds(obj.bounds.min.x - 500, obj.bounds.min.y - 500, obj.bounds.max.x + 500, obj.bounds.max.y + 500)
-                // let colliders = World.tree.query(range)
-                // if (colliders.length <= 0) continue
-                // for (let col of colliders) {
-                //     if (col === obj) continue
-                //     if (Bounds.Intersect(obj.bounds, col.bounds)) {
-                //         console.log('objects colliding')
-                //         let physics = obj.getComponent(PhysicsComponent)
-                //         console.log(physics)
-                //         if (physics) {
-                //             physics.acceleration.mult(0)
-                //             physics.velocity.mult(0)
-                //             physics.gravity.mult(0)
-                //             console.log(physics)
-                //         }
-                //     }
-                // }
-                for (let col of World.Colliders) {
-                    if (obj === col) continue
+            // for (let obj of Physics.updates) {
+            //     obj.update()
+            // }
+            // for (let obj of World.Colliders) {
+            //     // let range = new Bounds(obj.bounds.min.x - 500, obj.bounds.min.y - 500, obj.bounds.max.x + 500, obj.bounds.max.y + 500)
+            //     // let colliders = World.tree.query(range)
+            //     // if (colliders.length <= 0) continue
+            //     // for (let col of colliders) {
+            //     //     if (col === obj) continue
+            //     //     if (Bounds.Intersect(obj.bounds, col.bounds)) {
+            //     //         console.log('objects colliding')
+            //     //         let physics = obj.getComponent(PhysicsComponent)
+            //     //         console.log(physics)
+            //     //         if (physics) {
+            //     //             physics.acceleration.mult(0)
+            //     //             physics.velocity.mult(0)
+            //     //             physics.gravity.mult(0)
+            //     //             console.log(physics)
+            //     //         }
+            //     //     }
+            //     // }
+            //     for (let col of World.Colliders) {
+            //         if (obj === col) continue
 
-                    if (Bounds.Intersect(obj.bounds, col.bounds)) {
-                        //console.log('Broadphase Collision')
-                        Physics.response.clear()
-                        if (SAT.testPolygonPolygon(obj, col, Physics.response)) {
-                            //console.log('Precise Collision')
-                            let physics = obj.getComponent(PhysicsComponent)
-                            if (physics) {
-                                physics.velocity.mult(0)
-                            }
+            //         if (Bounds.Intersect(obj.bounds, col.bounds)) {
+            //             //console.log('Broadphase Collision')
+            //             Physics.response.clear()
+            //             if (SAT.testPolygonPolygon(obj, col, Physics.response)) {
+            //                 //console.log('Precise Collision')
+            //                 let physics = obj.getComponent(PhysicsComponent)
+            //                 if (physics) {
+            //                     physics.velocity.mult(0)
+            //                 }
 
-                            obj.transform.position.sub(Physics.response.overlapV)
-                        }
-                        // let physics = obj.getComponent(PhysicsComponent)
-                        // if (physics) {
-                        //     physics.acceleration.mult(0)
-                        //     physics.velocity.mult(0)
-                        //     physics.gravity.mult(0)
-                        // }
-                    }
-                }
-            }
+            //                 obj.transform.position.sub(Physics.response.overlapV)
+            //             }
+            //             // let physics = obj.getComponent(PhysicsComponent)
+            //             // if (physics) {
+            //             //     physics.acceleration.mult(0)
+            //             //     physics.velocity.mult(0)
+            //             //     physics.gravity.mult(0)
+            //             // }
+            //         }
+            //     }
+            // }
 
             //new area//
 
             //first update every object with physics
 
+            for (let obj of Physics.updates) {
+                obj.update()
+            }
 
             //second clear and update quadtree // https://stackoverflow.com/questions/41946007/efficient-and-well-explained-implementation-of-a-quadtree-for-2d-collision-det
 
+            World.tree.clear()
+
+            for (let obj of World.Colliders) {
+                World.tree.append(obj)
+            }
 
             //third search quad tree and get all collision pairs
 
+            for (let obj of World.Colliders) {
+                let range = new Bounds(obj.bounds.min.x - 500, obj.bounds.min.y - 500, obj.bounds.max.x + 500, obj.bounds.max.y + 500)
+                let others = World.tree.query(range)
+                if (others.length <= 0) continue
+                for (let o of others) {
+                    if (o == obj) continue
+                    if (Bounds.Intersect(obj.bounds, o.bounds)) {
+                        Physics.response.clear()
+                        if (SAT.testPolygonPolygon(obj, o, Physics.response)) {
+                            let physics = obj.getComponent(PhysicsComponent)
+                            if (physics) {
+                                physics.velocity.mult(0)
+                                physics.acceleration.mult(0)
+                                obj.transform.position.sub(Physics.response.overlapV)
+                            }
+
+                        }
+                    }
+                }
+            }
 
             //fourth iterate over collision pairs and find actual collsions and responses
 
