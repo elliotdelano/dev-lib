@@ -354,8 +354,8 @@ class LooseQuadTree {
             midY = this.staticBounds.min.y + (this.staticBounds.max.y - this.staticBounds.min.y) / 2
         let rectTL = new Bounds(this.staticBounds.min.x, this.staticBounds.min.y, midX, midY)
         let rectTR = new Bounds(midX, this.staticBounds.min.y, this.staticBounds.max.x, midY)
-        let rectBL = new Bounds(midX, midY, this.staticBounds.max.x, this.staticBounds.max.y)
-        let rectBR = new Bounds(this.staticBounds.min.x, midY, midX, this.staticBounds.max.y)
+        let rectBL = new Bounds(this.staticBounds.min.x, midY, midX, this.staticBounds.max.y)
+        let rectBR = new Bounds(midX, midY, this.staticBounds.max.x, this.staticBounds.max.y)
         this.boxTL = new LooseQuadTree(rectTL, this.size, this.max_depth, this.depth + 1)
         this.boxTR = new LooseQuadTree(rectTR, this.size, this.max_depth, this.depth + 1)
         this.boxBL = new LooseQuadTree(rectBL, this.size, this.max_depth, this.depth + 1)
@@ -374,18 +374,16 @@ class LooseQuadTree {
             return false
         }
         if (!Bounds.ContainsPoint(this.staticBounds, object.transform.position)) {
-            if(!object.transform) console.log('object missing transform')
             return false
         }
         if (this.objects.length < this.size && !this.isSplit) {
-            if(this.objects.length == 0) {
+            if (this.objects.length <= 0) {
                 this.bounds = Bounds.clone(object.bounds)
             } else {
                 Bounds.Expand(this.bounds, object.bounds)
             }
             this.objects.push(object)
 
-            
         } else {
             if (!this.isSplit && this.depth < this.max_depth) {
                 this.split()
@@ -405,7 +403,7 @@ class LooseQuadTree {
     }
     query(range, type = null) {
         let result = []
-        if(!this.bounds) return result
+        if (!this.bounds) return result
         if (!Bounds.Intersect(this.bounds, range)) return result
 
 
@@ -441,16 +439,16 @@ class LooseQuadTree {
 
     getLeafBounds() {
         let result = []
-        if(this.isSplit) {
+        if (this.isSplit) {
             result.concat(this.boxTL.getLeafBounds())
             result.concat(this.boxTR.getLeafBounds())
             result.concat(this.boxBL.getLeafBounds())
             result.concat(this.boxBR.getLeafBounds())
         } else {
-            if(this.bounds) {
+            if (this.bounds) {
                 result.push(this.bounds)
             }
-            }
+        }
         return result
     }
 
@@ -794,11 +792,11 @@ class Graphic extends Component {
     drawBounds(bounds, solid, color = 0xffffff) {
         let width = bounds.max.x - bounds.min.x,
             height = bounds.max.y - bounds.min.y
-        
-        if(solid) {
+
+        if (solid) {
             this.graphic.beginFill(color)
         } else {
-            this.graphic.lineStyle(4, color)
+            this.graphic.lineStyle(2, color)
         }
         this.graphic.drawRect(bounds.min.x, bounds.min.y, width, height)
         this.graphic.endFill()
@@ -821,7 +819,8 @@ class QuadTreeVisualizer extends Graphic {
     drawTree(tree) {
         this.graphic.clear()
         let bounds = tree.getLeafBounds()
-        for(let b of bounds) {
+
+        for (let b of bounds) {
             this.drawBounds(b, false, 0xf0f000)
         }
     }
@@ -1001,7 +1000,7 @@ const Renderer = {
             ///////////Do Stuff//////////
 
             for (let obj of Renderer.updates) {
-                if(obj instanceof QuadTreeVisualizer) {
+                if (obj instanceof QuadTreeVisualizer) {
                     obj.drawTree(World.tree)
                     continue
                 }
