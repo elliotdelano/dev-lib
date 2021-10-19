@@ -341,7 +341,9 @@ class QuadTree {
 class LooseQuadTree {
     constructor(rect, n, max_depth, depth) {
         this.staticBounds = rect
-        this.bounds = new Bounds(this.staticBounds.min.x, this.staticBounds.min.y, this.staticBounds.max.x, this.staticBounds.max.y)
+        //let avgX = (this.staticBounds.max.x + this.staticBounds.min.x) / 2,
+        //    avgY = (this.staticBounds.max.y + this.staticBounds.min.y) / 2
+        this.bounds
         this.size = n
         this.max_depth = max_depth
         this.depth = depth
@@ -372,21 +374,29 @@ class LooseQuadTree {
             return false
         }
         if (!Bounds.ContainsPoint(this.staticBounds, object.transform.position)) {
+            if(!object.transform) console.log('object missing transform')
             return false
         }
         if (this.objects.length < this.size && !this.isSplit) {
+            if(this.objects.length == 0) {
+                this.bounds = Bounds.clone(object.bounds)
+            } else {
+                Bounds.Expand(this.bounds, object.bounds)
+            }
             this.objects.push(object)
 
-            Bounds.Expand(this.bounds, object.bounds)
+            
         } else {
             if (!this.isSplit && this.depth < this.max_depth) {
                 this.split()
                 this.isSplit = true
             } else {
                 this.objects.push(object)
+                Bounds.Expand(this.bounds, object.bounds)
                 //console.log(this.objects)
                 return
             }
+            Bounds.Expand(this.bounds, object.bounds)
             this.boxTL.append(object)
             this.boxTR.append(object)
             this.boxBL.append(object)
@@ -395,6 +405,7 @@ class LooseQuadTree {
     }
     query(range, type = null) {
         let result = []
+        if(!this.bounds) return result
         if (!Bounds.Intersect(this.bounds, range)) return result
 
 
@@ -428,12 +439,24 @@ class LooseQuadTree {
         return result
     }
 
+    getLeafBounds() {
+        let result = []
+        if(this.isSplit) {
+            result.concat(this.boxTL.getLeafBounds())
+            result.concat(this.boxTR.getLeafBounds())
+            result.concat(this.boxBL.getLeafBounds())
+            result.concat(this.boxBR.getLeafBounds())
+        } else {
+            if(this.bounds) {
+                result.push(this.bounds)
+            }
+            }
+        return result
+    }
+
     clear() {
         this.objects = [];
-        this.bounds.min.x = this.staticBounds.min.x
-        this.bounds.min.y = this.staticBounds.min.y
-        this.bounds.max.x = this.staticBounds.max.x
-        this.bounds.max.y = this.staticBounds.max.y
+        this.bounds = undefined
         if (this.isSplit) {
             this.boxTL.clear()
             this.boxTR.clear()
@@ -465,6 +488,9 @@ class Bounds {
         if (bounds.min.y > other.min.y) bounds.min.y = other.min.y
         if (bounds.max.x < other.max.x) bounds.max.x = other.max.x
         if (bounds.max.y < other.max.y) bounds.max.y = other.max.y
+    }
+    static clone(bounds) {
+        return new Bounds(bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y)
     }
 }
 
@@ -765,12 +791,38 @@ class Graphic extends Component {
         this.graphic.endFill()
         World.stage.addChild(this.graphic)
     }
+    drawBounds(bounds, solid, color = 0xffffff) {
+        let width = bounds.max.x - bounds.min.x,
+            height = bounds.max.y - bounds.min.y
+        
+        if(solid) {
+            this.graphic.beginFill(color)
+        } else {
+            this.graphic.lineStyle(4, color)
+        }
+        this.graphic.drawRect(bounds.min.x, bounds.min.y, width, height)
+        this.graphic.endFill()
+    }
     removal() {
         World.stage.removeChild(this.graphic)
         for (let i = Renderer.updates.length; i >= 0; i--) {
             if (Renderer.updates[i] === this) {
                 return Renderer.updates.splice(i, 1)
             }
+        }
+    }
+}
+
+class QuadTreeVisualizer extends Graphic {
+    constructor(parent) {
+        super(parent)
+        World.stage.addChild(this.graphic)
+    }
+    drawTree(tree) {
+        this.graphic.clear()
+        let bounds = tree.getLeafBounds()
+        for(let b of bounds) {
+            this.drawBounds(b, false, 0xf0f000)
         }
     }
 }
@@ -949,6 +1001,10 @@ const Renderer = {
             ///////////Do Stuff//////////
 
             for (let obj of Renderer.updates) {
+                if(obj instanceof QuadTreeVisualizer) {
+                    obj.drawTree(World.tree)
+                    continue
+                }
                 let transform = obj.getComponent(Transform)
                 let graphic = obj.getComponent(Graphic)
                 graphic.graphic.position = transform.position
