@@ -672,8 +672,31 @@ class Collider extends Component {
         }
     }
     static ResolvePositions(colA, colB, response) {
-        if (!colA.isStatic) colA.transform.position.add(response.overlapV)
-        if (!colB.isStatic) colB.transform.position.add(response.overlapV)
+        let physA = colA.getComponent(PhysicsComponent)
+        let physB = colB.getComponent(PhysicsComponent)
+        let rv
+        if (!physA) {
+            rv = physB.velocity.copy()
+        }
+        else if (!physB) {
+            rv = physA.velocity.copy()
+        }
+        else {
+            rv = Vector2.sub(physB.velocity, physA.velocity)
+        }
+        let velNorm = rv.dot(response.overlapN)
+        if (velNorm > 0) return
+
+        let j = velNorm * -(1 - 0.1)
+        if (physA && physB) j /= (1 / physA.mass + 1 / physB.mass)
+        else j /= 1 / 5
+
+
+        let impulse = response.overlapV.mult(j)
+        console.log(impulse)
+
+        if (!colA.isStatic) colA.transform.position.add(impulse)
+        if (!colB.isStatic) colB.transform.position.sub(impulse)
     }
 
     static ResolvePairsPhysics(pairs) {
