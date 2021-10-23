@@ -519,6 +519,7 @@ class ComponentManager {
         if (typeof component == 'function') {
             let comp = new component.prototype.constructor(this.parent, ...args)
             this.components[comp.constructor.name] = comp
+            return this.components[comp.constructor.name]
         } else {
             console.error('Error: Component non-existing')
         }
@@ -625,6 +626,7 @@ class Collider extends Component {
         this.points = points || []
         this.bounds = new Bounds()
         this.transform = this.getComponent(Transform)
+        this.isStatic = false
         Collider.UpdateBounds(this.bounds, this.points, this.transform)
         World.Colliders.push(this)
     }
@@ -662,6 +664,35 @@ class Collider extends Component {
         bounds.min.y = yMin
         bounds.max.x = xMax
         bounds.max.y = yMax
+    }
+
+    static ResolvePairsPositions(pairs) {
+        for (let pair of pairs) {
+            Collider.ResolvePositions(pair[0], pair[1], pair[2])
+        }
+    }
+    static ResolvePositions(colA, colB, response) {
+        if (!colA.isStatic) colA.transform.position.add(response.overlapV)
+        if (!colB.isStatic) colB.transform.position.add(response.overlapV)
+    }
+
+    static ResolvePairsPhysics(pairs) {
+        for (let pair of pairs) {
+            Collider.ResolvePhysics(pair[0], pair[1], pair[2])
+        }
+    }
+
+    static ResolvePhysics(colA, colB, reponse) {
+        let physicsA = colA.getComponent(PhysicsComponent)
+        let physicsB = colB.getComponent(PhysicsComponent)
+        if (physicsA && !colA.isStatic) {
+            physicsA.velocity.mult(0)
+            physicsA.acceleration.mult(0)
+        }
+        if (physicsB && !colB.isStatic) {
+            physicsB.velocity.mult(0)
+            physicsB.acceleration.mult(0)
+        }
     }
 }
 
@@ -834,6 +865,32 @@ const World = {
 World.bounds = new Bounds(0, 0, World.size.x, World.size.y)
 World.tree = new LooseQuadTree(World.bounds, 2, 10, 0)
 
+World.getCollisionPairs = () => {
+    let pairs = []
+    for (let i = 0; i < World.Colliders.length; i++) {
+        for (let j = 0; j < i; j++) {
+            if (Bounds.Intersect(World.Colliders[i].bounds, World.Colliders[j].bounds)) {
+                pairs.push([World.Colliders[i], World.Colliders[j]])
+            }
+        }
+    }
+
+    return pairs
+}
+
+World.getNarrowPhaseCollisionPairs = (ipairs) => {
+    let returns = []
+    let pairs = ipairs
+
+    for (let i = 0; i < pairs.length; i++) {
+        let r = new Response()
+        if (SAT.testPolygonPolygon(pairs[i][0], pairs[i][1], r)) {
+            returns.push([pairs[i][0], pairs[i][1], r])
+        }
+    }
+    return returns
+}
+
 const Physics = {
     gravity: 9.81,
     updates: [],
@@ -912,6 +969,28 @@ const Physics = {
             //     }
             // }
 
+            // old code
+            // for (let obj of World.Colliders) {
+            //     let range = new Bounds(obj.bounds.min.x - 500, obj.bounds.min.y - 500, obj.bounds.max.x + 500, obj.bounds.max.y + 500)
+            //     let others = World.tree.query(range)
+            //     if (others.length <= 0) continue
+            //     for (let o of others) {
+            //         if (o == obj) continue
+            //         if (Bounds.Intersect(obj.bounds, o.bounds)) {
+            //             Physics.response.clear()
+            //             if (SAT.testPolygonPolygon(obj, o, Physics.response)) {
+            //                 let physics = obj.getComponent(PhysicsComponent)
+            //                 if (physics) {
+            //                     physics.velocity.mult(0)
+            //                     physics.acceleration.mult(0)
+            //                     obj.transform.position.sub(Physics.response.overlapV)
+            //                 }
+
+            //             }
+            //         }
+            //     }
+            // }
+
             //new area//
 
             //first update every object with physics
@@ -930,35 +1009,19 @@ const Physics = {
 
             //third search quad tree and get all collision pairs
 
-            for (let obj of World.Colliders) {
-                let range = new Bounds(obj.bounds.min.x - 500, obj.bounds.min.y - 500, obj.bounds.max.x + 500, obj.bounds.max.y + 500)
-                let others = World.tree.query(range)
-                if (others.length <= 0) continue
-                for (let o of others) {
-                    if (o == obj) continue
-                    if (Bounds.Intersect(obj.bounds, o.bounds)) {
-                        Physics.response.clear()
-                        if (SAT.testPolygonPolygon(obj, o, Physics.response)) {
-                            let physics = obj.getComponent(PhysicsComponent)
-                            if (physics) {
-                                physics.velocity.mult(0)
-                                physics.acceleration.mult(0)
-                                obj.transform.position.sub(Physics.response.overlapV)
-                            }
-
-                        }
-                    }
-                }
-            }
+            let pairs = World.getCollisionPairs()
 
             //fourth iterate over collision pairs and find actual collsions and responses
 
+            pairs = World.getNarrowPhaseCollisionPairs(pairs)
 
             //fifth iterate over collisions and solve for new positions
 
+            Collider.ResolvePairsPositions(pairs)
 
             //sixth iterate over collisions and solve for new velocities
 
+            Collider.ResolvePairsPhysics(pairs)
 
             //seventh clear forces on objects
 
