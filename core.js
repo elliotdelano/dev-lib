@@ -53,7 +53,7 @@ class Vector2 {
         this.y *= n;
         return this;
     }
-    static multi(a, b) {
+    static mult(a, b) {
         return new Vector2(a.x * b.x, a.y * b.y)
     }
     len2() {
@@ -675,28 +675,42 @@ class Collider extends Component {
         let physA = colA.getComponent(PhysicsComponent)
         let physB = colB.getComponent(PhysicsComponent)
         let rv
-        if (!physA) {
-            rv = physB.velocity.copy()
-        }
-        else if (!physB) {
+        let colAS = colA.isStatic
+        let colBS = colB.isStatic
+        if (physA) {
             rv = physA.velocity.copy()
         }
-        else {
-            rv = Vector2.sub(physB.velocity, physA.velocity)
+        if (!colAS) {
+            if (rv) {
+                colA.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV.mult(0.5)))
+            } else {
+                colA.transform.position.add(response.overlapV.mult(0.5))
+            }
+        } else {
+            if (rv) {
+                colB.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV))
+            } else {
+                colB.transform.position.add(response.overlapV)
+            }
         }
-        let velNorm = rv.dot(response.overlapN)
-        if (velNorm > 0) return
-
-        let j = velNorm * -(1 - 0.1)
-        if (physA && physB) j /= (1 / physA.mass + 1 / physB.mass)
-        else j /= 1 / 5
 
 
-        let impulse = response.overlapV.mult(j)
-        console.log(impulse)
-
-        if (!colA.isStatic) colA.transform.position.add(impulse)
-        if (!colB.isStatic) colB.transform.position.sub(impulse)
+        if (physB) {
+            rv = physB.velocity.copy()
+        }
+        if (!colBS) {
+            if (rv) {
+                colB.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV.mult(0.5)))
+            } else {
+                colB.transform.position.add(response.overlapV.mult(0.5))
+            }
+        } else {
+            if (rv) {
+                colA.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV))
+            } else {
+                colA.transform.position.add(response.overlapV)
+            }
+        }
     }
 
     static ResolvePairsPhysics(pairs) {
