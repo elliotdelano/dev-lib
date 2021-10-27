@@ -679,36 +679,28 @@ class Collider extends Component {
         let colBS = colB.isStatic
         if (physA) {
             rv = physA.velocity.copy()
+        } else {
+            rv = new Vector2(0, 0)
         }
         if (!colAS) {
             if (rv) {
-                colA.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV.mult(0.5)))
+                colA.transform.position.sub(Vector2.mult(rv.normalize(), response.overlapV.copy().mult(1)))
             } else {
-                colA.transform.position.add(response.overlapV.mult(0.5))
-            }
-        } else {
-            if (rv) {
-                colB.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV))
-            } else {
-                colB.transform.position.add(response.overlapV)
+                colA.transform.position.add(response.overlapV.mult(1))
             }
         }
 
 
         if (physB) {
             rv = physB.velocity.copy()
+        }else {
+            rv = new Vector2(0, 0)
         }
         if (!colBS) {
             if (rv) {
-                colB.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV.mult(0.5)))
+                colB.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV.copy().mult(1)))
             } else {
-                colB.transform.position.add(response.overlapV.mult(0.5))
-            }
-        } else {
-            if (rv) {
-                colA.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV))
-            } else {
-                colA.transform.position.add(response.overlapV)
+                colB.transform.position.add(response.overlapV.mult(1))
             }
         }
     }
