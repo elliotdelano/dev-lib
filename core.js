@@ -683,25 +683,17 @@ class Collider extends Component {
             rv = new Vector2(0, 0)
         }
         if (!colAS) {
-            if (rv) {
-                colA.transform.position.sub(Vector2.mult(rv.normalize(), response.overlapV.copy().mult(1)))
-            } else {
-                colA.transform.position.add(response.overlapV.mult(1))
-            }
+            colA.transform.position.sub(Vector2.mult(rv.normalize(), response.overlapV))
         }
 
 
         if (physB) {
             rv = physB.velocity.copy()
-        }else {
+        } else {
             rv = new Vector2(0, 0)
         }
         if (!colBS) {
-            if (rv) {
-                colB.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV.copy().mult(1)))
-            } else {
-                colB.transform.position.add(response.overlapV.mult(1))
-            }
+            colB.transform.position.add(Vector2.mult(rv.normalize(), response.overlapV))
         }
     }
 
@@ -1048,7 +1040,7 @@ const Physics = {
 
             Collider.ResolvePairsPositions(pairs)
 
-            //sixth iterate over collisions and solve for new velocities
+            //sixth iterate over collisions and solve for new velocities https://gamedev.stackexchange.com/questions/48587/resolving-a-collision-with-forces
 
             Collider.ResolvePairsPhysics(pairs)
 
