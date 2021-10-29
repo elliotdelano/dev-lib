@@ -574,7 +574,7 @@ class Transform extends Component {
 }
 
 class PhysicsComponent extends Component {
-    gravity = new Vector2(0, 0.1)
+    gravity = new Vector2(0, 1)
     mass = 1
     _accel = new Vector2()
     _vel = new Vector2()
@@ -587,12 +587,13 @@ class PhysicsComponent extends Component {
         this.inertia = Collider.MomentOfAreaInertia(this.getComponent(PolygonCollider).points || this.getComponent(Collider).points, this.mass)
     }
 
-    applyForce(force) {
+    applyForce(force, position) {
         this._accel.add(force)
-        this.torque += force.y - force.x
+        let offset = { x: this.position.x - position.x, y: this.position.y - position.y }
+        this.torque += force.y + offset.y - force.x + offset.x
     }
     update() {
-        this.applyForce(this.gravity)
+        this._accel.add(this.gravity)
 
         let velPrevX = this.transform.position.x - this.transform.positionPrevious.x,
             velPrevY = this.transform.position.y - this.transform.positionPrevious.y
