@@ -74,6 +74,12 @@ class Vector2 {
         }
         return this.x * x + this.y * y;
     }
+    static dot(a, b) {
+        return a.x * b.x + a.y * b.y
+    }
+    static cross(a, b) {
+        return (a.x * b.y) - (a.y * b.x)
+    }
     dist(v) {
         var d = Vector2.sub(v, this)
         return d.mag()
@@ -572,24 +578,33 @@ class PhysicsComponent extends Component {
     mass = 1
     _accel = new Vector2()
     _vel = new Vector2()
+    torque = 0
     constructor(parent) {
         super(parent)
         Physics.updates.push(this)
 
         this.transform = this.getComponent(Transform)
+        this.inertia = Collider.MomentOfAreaInertia(this.getComponent(PolygonCollider).points || this.getComponent(Collider).points, this.mass)
     }
 
     applyForce(force) {
         this._accel.add(force)
+        this.torque += force.y - force.x
     }
     update() {
         this.applyForce(this.gravity)
 
-        this._vel.add(this._accel.div(this.mass))
+        let velPrevX = this.transform.position.x - this.transform.positionPrevious.x,
+            velPrevY = this.transform.position.y - this.transform.positionPrevious.y
+
+        this._vel.x = (velPrevX) + this._accel.x / this.mass
+        this._vel.y = (velPrevY) + this._accel.y / this.mass
+
+        this.transform.positionPrevious.mimic(this.transform.position)
         this.transform.position.add(this._vel)
 
-        this._velAng = (this.transform.rotation - this.transform.rotationPrevious)
-        this.transform.rotationPrevious = this.transform.rotation
+        this._velAng = (this.transform.rotation - this.transform.rotationPrevious) + this.torque / this.inertia
+        this.transform.rotationPrevious = this.transform.rotation + 0
         this.transform.rotation += this._velAng
 
         let col = this.getComponent(Collider) || this.getComponent(PolygonCollider)
@@ -599,8 +614,6 @@ class PhysicsComponent extends Component {
             }
             Collider.UpdateBounds(col.bounds, col.points, this.transform)
         }
-
-        this._accel.mult(0)
     }
 
 
@@ -616,6 +629,13 @@ class PhysicsComponent extends Component {
     }
     get velocity() {
         return this._vel
+    }
+
+    set angVelocity(vel) {
+        this._velAng = vel
+    }
+    get angVelocity() {
+        return this._velAng
     }
 
 }
@@ -703,17 +723,46 @@ class Collider extends Component {
         }
     }
 
-    static ResolvePhysics(colA, colB, reponse) {
+    static ResolvePhysics(colA, colB, response) {
         let physicsA = colA.getComponent(PhysicsComponent)
         let physicsB = colB.getComponent(PhysicsComponent)
-        if (physicsA && !colA.isStatic) {
-            physicsA.velocity.mult(0)
-            physicsA.acceleration.mult(0)
+        if (physicsA && physicsB) {
+            let aPre = physicsA.velocity.copy()
+            let bPre = physicsB.velocity.copy()
+            physicsA.velocity = (aPre.mult(physicsA.mass - physicsB.mass).add(bPre.mult(2 * physicsB.mass)))
+            physicsA.velocity.div(physicsA.mass + physicsB.mass)
+
+            physicsB.velocity = (bPre.mult(physicsB.mass - physicsA.mass).add(bPre.mult(2 * physicsA.mass)))
+            physicsB.velocity.div(physicsA.mass + physicsB.mass)
         }
-        if (physicsB && !colB.isStatic) {
-            physicsB.velocity.mult(0)
-            physicsB.acceleration.mult(0)
+        else
+            if (physicsA && !colA.isStatic && colB.isStatic) {
+                if (response.overlapN.y == -1) {
+                    physicsA.velocity = Vector2.mult(physicsA.velocity, new Vector2(1, 0))
+                }
+            } else
+                if (physicsB && !colB.isStatic && colA.isStatic) {
+                    if (response.overlapN.y == -1) {
+                        physicsB.velocity = Vector2.mult(physicsB.velocity, new Vector2(1, 0))
+                    }
+                }
+    }
+
+    static MomentOfAreaInertia(points, mass) { // https://en.wikipedia.org/wiki/Second_moment_of_area
+        var numerator = 0,
+            denominator = 0,
+            v = points,
+            cross,
+            j;
+
+        for (var n = 0; n < v.length; n++) {
+            j = (n + 1) % v.length;
+            cross = Math.abs(Vector2.cross(v[j], v[n]));
+            numerator += cross * (Vector2.dot(v[j], v[j]) + Vector2.dot(v[j], v[n]) + Vector2.dot(v[n], v[n]));
+            denominator += cross;
         }
+
+        return (mass / 6) * (numerator / denominator);
     }
 }
 
@@ -1046,6 +1095,7 @@ const Physics = {
 
             //seventh clear forces on objects
 
+            Physics.updates.forEach(obj => obj.acceleration.mult(0))
 
             //////////Stop Stuff/////////
             Physics.frameCount++;
@@ -1091,6 +1141,7 @@ const Renderer = {
                 let transform = obj.getComponent(Transform)
                 let graphic = obj.getComponent(Graphic)
                 graphic.graphic.position = transform.position
+                graphic.graphic.rotation = transform.rotation
             }
             //////////Stop Stuff/////////
             Renderer.frameCount++;
