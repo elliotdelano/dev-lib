@@ -499,31 +499,14 @@ class Bounds {
 }
 
 class GameObject {
-    manager = new ComponentManager(this)
-    constructor() {
-        this.manager.parent = this
-    }
-    addComponent = this.manager.addComponent
-    getComponent = this.manager.getComponent
-    removeComponent = this.manager.removeComponent
-}
-
-class ComponentManager {
-    constructor(parent) {
-        this.parent = parent
-    }
+    tag = 'Default'
     components = {}
-    // addComponent = (component) => {
-    //     if (component instanceof Component) {
-    //         this.components[component.constructor.name] = component
-    //         this.components[component.constructor.name].setGameObject(this.parent)
-    //     } else {
-    //         console.error('Error: Component non-existing')
-    //     }
-    // }
+    constructor() {
+
+    }
     addComponent = (component, ...args) => {
         if (typeof component == 'function') {
-            let comp = new component.prototype.constructor(this.parent, ...args)
+            let comp = new component.prototype.constructor(this, ...args)
             this.components[comp.constructor.name] = comp
             return this.components[comp.constructor.name]
         } else {
@@ -536,13 +519,7 @@ class ComponentManager {
     removeComponent = (identifier) => {
         this.components[identifier.name].removal()
         delete this.components[identifier.name]
-    }
-}
-
-class PhysicsObject extends GameObject {
-    constructor() {
-        this.addComponent(new Transform())
-        this.addComponent(new PhysicsComponent())
+        return this.parent
     }
 }
 
@@ -551,6 +528,7 @@ class Component {
     constructor(object) {
         this.gameObject = object
         this.getComponent = this.gameObject.getComponent
+        this.addComponent = this.gameObject.addComponent
     }
     // set gameObject(gameObject) {
     //     this.gameObject = gameObject
@@ -574,7 +552,7 @@ class Transform extends Component {
 }
 
 class PhysicsComponent extends Component {
-    gravity = new Vector2(0, 1)
+    gravity = new Vector2(0, 0.1)
     mass = 1
     _accel = new Vector2()
     _vel = new Vector2()
@@ -595,11 +573,11 @@ class PhysicsComponent extends Component {
     update() {
         this._accel.add(this.gravity)
 
-        let velPrevX = this.transform.position.x - this.transform.positionPrevious.x,
-            velPrevY = this.transform.position.y - this.transform.positionPrevious.y
+        // let velPrevX = this.transform.position.x - this.transform.positionPrevious.x,
+        //     velPrevY = this.transform.position.y - this.transform.positionPrevious.y
 
-        this._vel.x = (velPrevX) + this._accel.x / this.mass
-        this._vel.y = (velPrevY) + this._accel.y / this.mass
+        this._vel.x += this._accel.x / this.mass
+        this._vel.y += this._accel.y / this.mass
 
         this.transform.positionPrevious.mimic(this.transform.position)
         this.transform.position.add(this._vel)
@@ -650,6 +628,7 @@ class Collider extends Component {
         this.isStatic = false
         Collider.UpdateBounds(this.bounds, this.points, this.transform)
         World.Colliders.push(this)
+        this.id = World.GetColliderID()
     }
     removal() {
         for (let i = World.Colliders.length - 1; i >= 0; i--) {
@@ -736,17 +715,19 @@ class Collider extends Component {
             physicsB.velocity = (bPre.mult(physicsB.mass - physicsA.mass).add(bPre.mult(2 * physicsA.mass)))
             physicsB.velocity.div(physicsA.mass + physicsB.mass)
         }
-        else
+        else {
             if (physicsA && !colA.isStatic && colB.isStatic) {
                 if (response.overlapN.y == -1) {
                     physicsA.velocity = Vector2.mult(physicsA.velocity, new Vector2(1, 0))
                 }
-            } else
+            } else {
                 if (physicsB && !colB.isStatic && colA.isStatic) {
                     if (response.overlapN.y == -1) {
                         physicsB.velocity = Vector2.mult(physicsB.velocity, new Vector2(1, 0))
                     }
                 }
+            }
+        }
     }
 
     static MomentOfAreaInertia(points, mass) { // https://en.wikipedia.org/wiki/Second_moment_of_area
@@ -863,7 +844,7 @@ class Graphic extends Component {
         this.graphic = new PIXI.Graphics()
         Renderer.updates.push(this)
     }
-    DrawAABB(bounds, solid, color = 0xffffff) {
+    DrawAABB(bounds, solid, color = 0x000000) {
         let width = bounds.max.x - bounds.min.x
         let height = bounds.max.y - bounds.min.y
         this.graphic.clear()
@@ -876,7 +857,7 @@ class Graphic extends Component {
         this.graphic.endFill()
         World.stage.addChild(this.graphic)
     }
-    DrawPolygon(points, solid, color = 0xffffff) {
+    DrawPolygon(points, solid, color = 0x000000) {
         let p_points = []
         for (let point of points) {
             p_points.push(new PIXI.Point(point.x, point.y))
@@ -931,21 +912,43 @@ class QuadTreeVisualizer extends Graphic {
 const World = {
     stage: undefined,
     size: new Vector2(700, 700),
-    Colliders: []
+    Colliders: [],
+    ColliderID: 0,
+    GetColliderID: function () {
+        let id = World.ColliderID + 0
+        World.ColliderID++
+        return id
+    },
+    GetPairID: function (colA, colB) {
+        let useB = colA.id < colB.id
+        if (!useB) {
+            return colA.id + '_' + colB.id
+        } else {
+            return colB.id + '_' + colA.id
+        }
+    }
 }
 World.bounds = new Bounds(0, 0, World.size.x, World.size.y)
 World.tree = new LooseQuadTree(World.bounds, 2, 10, 0)
 
 World.getCollisionPairs = () => {
+    let pairIDs = []
     let pairs = []
-    for (let i = 0; i < World.Colliders.length; i++) {
-        for (let j = 0; j < i; j++) {
-            if (Bounds.Intersect(World.Colliders[i].bounds, World.Colliders[j].bounds)) {
-                pairs.push([World.Colliders[i], World.Colliders[j]])
+
+    for (let col of World.Colliders) {
+        let range = new Bounds(col.bounds.min.x - 25, col.bounds.min.y - 25, col.bounds.max.x + 25, col.bounds.max.y + 25)
+        let others = World.tree.query(range)
+        if (others.length <= 0) continue
+        for (let o of others) {
+            if (o == col) continue
+            if (col.gameObject.tag == 'Terrain' && o.gameObject.tag == 'Terrain') continue
+            if (Bounds.Intersect(col.bounds, o.bounds)) {
+                let id = World.GetPairID(col, o)
+                if (pairIDs.includes(id)) continue
+                pairs.push([col, o])
             }
         }
     }
-
     return pairs
 }
 
@@ -989,80 +992,8 @@ const Physics = {
         // if enough time has elapsed draw the next frame
         if (elapsed > Physics.fpsInterval) {
             Physics.lastDrawTime = now - (elapsed % Physics.fpsInterval);
-            ///////////Do Stuff//////////
-            //World.tree.clear()
-            // for (let col of World.Colliders) {
-            //     World.tree.append(col)
-            // }
-            // for (let obj of Physics.updates) {
-            //     obj.update()
-            // }
-            // for (let obj of World.Colliders) {
-            //     // let range = new Bounds(obj.bounds.min.x - 500, obj.bounds.min.y - 500, obj.bounds.max.x + 500, obj.bounds.max.y + 500)
-            //     // let colliders = World.tree.query(range)
-            //     // if (colliders.length <= 0) continue
-            //     // for (let col of colliders) {
-            //     //     if (col === obj) continue
-            //     //     if (Bounds.Intersect(obj.bounds, col.bounds)) {
-            //     //         console.log('objects colliding')
-            //     //         let physics = obj.getComponent(PhysicsComponent)
-            //     //         console.log(physics)
-            //     //         if (physics) {
-            //     //             physics.acceleration.mult(0)
-            //     //             physics.velocity.mult(0)
-            //     //             physics.gravity.mult(0)
-            //     //             console.log(physics)
-            //     //         }
-            //     //     }
-            //     // }
-            //     for (let col of World.Colliders) {
-            //         if (obj === col) continue
 
-            //         if (Bounds.Intersect(obj.bounds, col.bounds)) {
-            //             //console.log('Broadphase Collision')
-            //             Physics.response.clear()
-            //             if (SAT.testPolygonPolygon(obj, col, Physics.response)) {
-            //                 //console.log('Precise Collision')
-            //                 let physics = obj.getComponent(PhysicsComponent)
-            //                 if (physics) {
-            //                     physics.velocity.mult(0)
-            //                 }
-
-            //                 obj.transform.position.sub(Physics.response.overlapV)
-            //             }
-            //             // let physics = obj.getComponent(PhysicsComponent)
-            //             // if (physics) {
-            //             //     physics.acceleration.mult(0)
-            //             //     physics.velocity.mult(0)
-            //             //     physics.gravity.mult(0)
-            //             // }
-            //         }
-            //     }
-            // }
-
-            // old code
-            // for (let obj of World.Colliders) {
-            //     let range = new Bounds(obj.bounds.min.x - 500, obj.bounds.min.y - 500, obj.bounds.max.x + 500, obj.bounds.max.y + 500)
-            //     let others = World.tree.query(range)
-            //     if (others.length <= 0) continue
-            //     for (let o of others) {
-            //         if (o == obj) continue
-            //         if (Bounds.Intersect(obj.bounds, o.bounds)) {
-            //             Physics.response.clear()
-            //             if (SAT.testPolygonPolygon(obj, o, Physics.response)) {
-            //                 let physics = obj.getComponent(PhysicsComponent)
-            //                 if (physics) {
-            //                     physics.velocity.mult(0)
-            //                     physics.acceleration.mult(0)
-            //                     obj.transform.position.sub(Physics.response.overlapV)
-            //                 }
-
-            //             }
-            //         }
-            //     }
-            // }
-
-            //new area//
+            //do stuff//
 
             //first update every object with physics
 
@@ -1096,7 +1027,8 @@ const Physics = {
 
             //seventh clear forces on objects
 
-            Physics.updates.forEach(obj => obj.acceleration.mult(0))
+            Physics.updates.forEach(obj => { if (obj.acceleration) obj.acceleration.mult(0) })
+            World.ColliderID = 0
 
             //////////Stop Stuff/////////
             Physics.frameCount++;

@@ -9,14 +9,22 @@
         body,
         div,
         canvas {
-            margin: 0;
             padding: 0;
+            margin: auto;
+            display: block;
+            width: 700px;
+            height: 700px;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
         }
     </style>
 </head>
 
 <body style="float:left;">
-    <canvas id="canvas" style="width:700px;height:700px;"></canvas>
+    <canvas id="canvas"></canvas>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/5.3.5/pixi.min.js"></script>
     <script src="https://github.com/davidfig/pixi-viewport/releases/download/4.31.0/viewport.min.js"></script>
